@@ -1,526 +1,91 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Row, Col, Spin, Empty, Tag, Statistic, Progress, Table, Button, Modal, message } from 'antd';
+import React, { useState, useEffect } from 'react';
+import { Layout, Menu, Button, Modal, Tag } from 'antd';
 import { 
-  TrophyOutlined, ThunderboltOutlined, ScanOutlined, FireOutlined, 
-  AimOutlined, HistoryOutlined, SoundOutlined, MutedOutlined,
-  LogoutOutlined, CrownOutlined
+  DesktopOutlined, GiftOutlined, LogoutOutlined, CrownOutlined 
 } from '@ant-design/icons';
-import styled, { keyframes } from 'styled-components';
-import { collection, onSnapshot, query, orderBy, limit, doc } from "firebase/firestore";
-import { db } from '../firebase';
+import { doc, onSnapshot } from "firebase/firestore";
+import { db } from '../firebase'; 
 import { useNavigate } from 'react-router-dom';
+import styled from 'styled-components';
 
-// --- 🎵 사운드 파일 ---
-const BEEP_SOUND_URL = "https://assets.mixkit.co/active_storage/sfx/995/995-preview.mp3"; 
-const FANFARE_SOUND_URL = "https://assets.mixkit.co/active_storage/sfx/2019/2019-preview.mp3";
+// ★ 같은 폴더의 파일들 불러오기
+import Dashboard from './Dashboard';
+import RouletteGame from './RouletteGame';
 
-// --- ✨ 애니메이션 ---
-const pulseGold = keyframes`
-  0% { box-shadow: 0 0 0 0 rgba(212, 175, 55, 0.4); border-color: #d4af37; }
-  70% { box-shadow: 0 0 0 10px rgba(212, 175, 55, 0); border-color: #ffd700; }
-  100% { box-shadow: 0 0 0 0 rgba(212, 175, 55, 0); border-color: #374151; }
-`;
+const { Header, Content, Sider } = Layout;
 
-const pulseRed = keyframes`
-  0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); border-color: #ef4444; }
-  70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); border-color: #ef4444; }
-  100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); border-color: #374151; }
-`;
-
-const scanMove = keyframes`
-  0% { background-position: 0% 50%; }
-  50% { background-position: 100% 50%; }
-  100% { background-position: 0% 50%; }
-`;
-
-// --- 🎨 스타일 ---
-const Container = styled.div`
-  padding: 20px;
-  background-color: #111827; /* 배경색 확실하게 지정 */
+const DarkLayout = styled(Layout)`
   min-height: 100vh;
-  color: white;
-  max-width: 1400px;
-  margin: 0 auto;
+  .ant-layout-sider { background: #0f172a; border-right: 1px solid #1e293b; }
+  .ant-menu { background: #0f172a; color: #94a3b8; border-right: none; }
+  .ant-menu-item-selected { background-color: #06b6d4 !important; color: white !important; font-weight: bold; }
+  .ant-layout-header { background: #0f172a; border-bottom: 1px solid #1e293b; display: flex; justify-content: space-between; align-items: center; padding: 0 24px; }
+  .ant-layout-content { background: #111827; padding: 24px; overflow-y: auto; }
 `;
-
-const HeaderContainer = styled.div`
-  display: flex;
-  justify-content: space-between; /* 양쪽 정렬 */
-  align-items: center;
-  margin-bottom: 25px;
-  padding-bottom: 20px;
-  border-bottom: 1px solid #374151;
-`;
-
-const LeftHeader = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 15px;
-`;
-
-const RightHeader = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 10px;
-`;
-
-const DashboardTitle = styled.h1`
-  font-size: 24px;
-  font-weight: 900;
-  margin: 0;
-  background: linear-gradient(to right, #fff, #94a3b8);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  letter-spacing: 1px;
-`;
-
-const SoundToggleBtn = styled.button`
-  background: ${props => props.active ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)'};
-  border: 1px solid ${props => props.active ? '#10b981' : '#ef4444'};
-  color: ${props => props.active ? '#10b981' : '#ef4444'};
-  padding: 5px 12px;
-  border-radius: 20px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 13px;
-  font-weight: bold;
-  transition: all 0.3s ease;
-  outline: none;
-
-  &:hover {
-    background: ${props => props.active ? 'rgba(16, 185, 129, 0.4)' : 'rgba(239, 68, 68, 0.4)'};
-  }
-  animation: ${props => !props.active ? pulseRed : 'none'} 2s infinite;
-`;
-
-const HistoryPanel = styled.div`
-  background: linear-gradient(145deg, #1f2937, #111827);
-  border-radius: 16px;
-  padding: 20px;
-  margin-bottom: 30px;
-  border: 1px solid #374151;
-  display: flex;
-  justify-content: space-around;
-  align-items: center;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-
-  @media (max-width: 768px) {
-    flex-direction: column;
-    gap: 20px;
-  }
-`;
-
-const SectionTitle = styled.div`
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 20px;
-  
-  h2 {
-    margin: 0;
-    color: white;
-    font-size: 20px;
-    letter-spacing: 1px;
-    text-transform: uppercase;
-  }
-  .icon { font-size: 20px; margin-right: 10px; }
-  &.gold { color: #d4af37; h2 { text-shadow: 0 0 10px rgba(212, 175, 55, 0.3); } }
-  &.red { color: #ef4444; h2 { text-shadow: 0 0 10px rgba(239, 68, 68, 0.3); } }
-`;
-
-const GameCard = styled.div`
-  background-color: #1f2937;
-  border-radius: 16px;
-  padding: 24px 20px;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  height: 250px;
-  border: 1px solid #4b5563;
-  position: relative;
-  overflow: visible;
-  transition: transform 0.3s ease;
-
-  &:hover { transform: translateY(-5px); }
-
-  &.waiting {
-    border-color: #d4af37;
-    animation: ${pulseGold} 2s infinite;
-    background: linear-gradient(145deg, #1f2937 0%, #292524 100%);
-  }
-
-  &.betting {
-    border-color: #ef4444;
-    animation: ${pulseRed} 1.5s infinite;
-    background: linear-gradient(145deg, #1f2937 0%, #450a0a 100%);
-  }
-`;
-
-const PickDisplay = styled.div`
-  font-size: 34px;
-  font-weight: 900;
-  letter-spacing: -1px;
-  text-align: center;
-  margin: 10px 0;
-  line-height: 1.2;
-  
-  &.P { color: #3b82f6; text-shadow: 0 0 20px rgba(59, 130, 246, 0.5); }
-  &.B { color: #ef4444; text-shadow: 0 0 20px rgba(239, 68, 68, 0.5); }
-`;
-
-const CountdownBox = styled.div`
-  text-align: center;
-  font-size: 28px;
-  font-weight: 900;
-  color: #fbbf24;
-  background: rgba(0, 0, 0, 0.5);
-  border: 1px solid #fbbf24;
-  border-radius: 8px;
-  padding: 10px;
-  margin-bottom: 10px;
-  
-  span {
-    display: block;
-    font-size: 11px;
-    font-weight: normal;
-    color: #fff;
-    margin-bottom: 0;
-    letter-spacing: 2px;
-  }
-`;
-
-const ScanZone = styled.div`
-  background: #000;
-  border: 1px dashed #374151;
-  border-radius: 12px;
-  padding: 20px;
-  text-align: center;
-  margin-top: 30px;
-  opacity: 0.6;
-
-  .scan-bar {
-    height: 2px;
-    width: 100%;
-    background: linear-gradient(90deg, transparent, #00e5ff, transparent);
-    background-size: 200% 100%;
-    animation: ${scanMove} 2s linear infinite;
-    margin-bottom: 10px;
-  }
-`;
-
-const DarkTable = styled(Table)`
-  .ant-table { background: transparent; color: #d1d5db; }
-  .ant-table-thead > tr > th { background: #1f2937 !important; color: #9ca3af !important; border-bottom: 1px solid #374151 !important; }
-  .ant-table-tbody > tr > td { border-bottom: 1px solid #1f2937 !important; color: #e5e7eb !important; }
-  .ant-table-tbody > tr:hover > td { background: #111827 !important; }
-  .ant-pagination-item-link, .ant-pagination-item { background: transparent !important; border-color: #374151 !important; a { color: #9ca3af !important; } }
-  .ant-pagination-item-active { border-color: #d4af37 !important; a { color: #d4af37 !important; } }
-`;
-
-// 🟡 대기 카드
-const WaitingCard = ({ room }) => {
-    const [count, setCount] = useState(3);
-    useEffect(() => {
-        const timer = setInterval(() => {
-            setCount(prev => (prev > 1 ? prev - 1 : 3));
-        }, 1000); 
-        return () => clearInterval(timer);
-    }, []);
-
-    return (
-        <GameCard className="waiting">
-            <div style={{color:'white', fontWeight:'bold', fontSize: 16}}>{room.room_name}</div>
-            <div style={{marginTop: 15, padding: '0 10px'}}>
-                <CountdownBox>
-                   <span>CHECKING</span>
-                   {count}
-                </CountdownBox>
-                <div style={{textAlign: 'center'}}>
-                    <div style={{fontSize:11, color:'#d4af37', marginBottom: 2, letterSpacing: 1}}>ENTRY PREPARE</div>
-                    <PickDisplay className={room.pick}>{room.pick === 'P' ? 'PLAYER' : 'BANKER'}</PickDisplay>
-                </div>
-            </div>
-            <div style={{display:'flex', justifyContent:'space-between', marginTop:'auto'}}>
-                <span style={{color:'#10b981', fontSize:12}}><ScanOutlined /> AI-{room.ai_num}</span>
-                <Tag color="gold">분석중</Tag>
-            </div>
-        </GameCard>
-    );
-};
 
 const Main = () => {
   const navigate = useNavigate();
-  const [waitingRooms, setWaitingRooms] = useState([]);
-  const [bettingRooms, setBettingRooms] = useState([]);
-  const [idleCount, setIdleCount] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [isSoundEnabled, setIsSoundEnabled] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
+  const [selectedKey, setSelectedKey] = useState('1'); // 메뉴 선택 상태 (1: 픽, 2: 룰렛)
   
-  // ★ 보안 및 유저 정보
+  // 유저 정보 & 보안
   const [userData, setUserData] = useState(null);
   const myUsername = localStorage.getItem('username');
   const mySessionId = localStorage.getItem('sessionId');
-  const userEntryLevel = parseInt(localStorage.getItem('entryLevel')) || 1; 
-
-  // ★ 관리자 권한 목록
   const adminRoles = ['super_admin', 'distributor', 'store'];
 
-  // 통계
-  const [stats, setStats] = useState({
-    totalScore: 0, totalGames: 0, winRate: 0, safeHitCount: 0, currentStreak: 0, history: []
-  });
+  const handleLogout = () => { localStorage.clear(); navigate('/'); };
 
-  const beepAudioRef = useRef(new Audio(BEEP_SOUND_URL));
-  const fanfareAudioRef = useRef(new Audio(FANFARE_SOUND_URL));
-  const isFirstLoad = useRef(true);
-
-  // 로그아웃
-  const handleLogout = () => {
-    localStorage.clear();
-    navigate('/');
-  };
-
-  // ★ 보안 체크 로직 (이중 접속 / 차단)
   useEffect(() => {
     if (!myUsername || !mySessionId) { handleLogout(); return; }
-
     const unsub = onSnapshot(doc(db, "users", myUsername), (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
         setUserData(data);
-
-        // 차단 체크
-        if (data.isBlocked) {
-          Modal.error({ title: '접속 차단', content: '관리자에 의해 차단되었습니다.', onOk: handleLogout, keyboard:false, maskClosable:false });
-          return;
-        }
-        // 이중 접속 체크
-        if (data.currentSessionId !== mySessionId) {
-          Modal.warning({ title: '중복 로그인', content: '다른 기기 접속이 감지되었습니다.', onOk: handleLogout, keyboard:false, maskClosable:false });
-        }
+        if (data.isBlocked) { Modal.error({ title: '접속 차단', content: '관리자에 의해 차단되었습니다.', onOk: handleLogout }); return; }
+        if (data.currentSessionId !== mySessionId) { Modal.warning({ title: '중복 로그인', content: '다른 기기 접속이 감지되었습니다.', onOk: handleLogout }); }
       } else { handleLogout(); }
     });
     return () => unsub();
   }, [myUsername, mySessionId, navigate]);
 
-  // 사운드 설정
-  useEffect(() => {
-    beepAudioRef.current.volume = 0.6;
-    fanfareAudioRef.current.volume = 0.8;
-  }, []);
-
-  const toggleSound = () => {
-    if (!isSoundEnabled) {
-      beepAudioRef.current.play().then(() => { beepAudioRef.current.pause(); beepAudioRef.current.currentTime = 0; }).catch(() => {});
-      fanfareAudioRef.current.play().then(() => { fanfareAudioRef.current.pause(); fanfareAudioRef.current.currentTime = 0; }).catch(() => {});
-      setIsSoundEnabled(true);
-    } else {
-      setIsSoundEnabled(false);
-    }
-  };
-
-  // 삐빅 소리 반복
-  useEffect(() => {
-    let intervalId = null;
-    if (isSoundEnabled && bettingRooms.length > 0) {
-        const playBeep = () => {
-             beepAudioRef.current.currentTime = 0;
-             beepAudioRef.current.play().catch(e => console.log("Sound error:", e));
-        };
-        playBeep();
-        intervalId = setInterval(playBeep, 1000); 
-    }
-    return () => { if(intervalId) clearInterval(intervalId); beepAudioRef.current.pause(); };
-  }, [bettingRooms.length, isSoundEnabled]);
-
-  // 게임 데이터 구독
-  useEffect(() => {
-    const q = query(collection(db, "rooms"), orderBy("updated_at", "desc"));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const roomData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      const waiting = roomData.filter(r => r.phase === 'WAITING');
-      const betting = roomData.filter(r => r.phase === 'BETTING' && r.step >= userEntryLevel);
-      const idle = roomData.length - waiting.length - betting.length;
-      betting.sort((a, b) => b.step - a.step);
-
-      setWaitingRooms(waiting);
-      setBettingRooms(betting);
-      setIdleCount(idle);
-      setLoading(false);
-    });
-    return () => unsubscribe();
-  }, [userEntryLevel]);
-
-  // 히스토리 & 빵빠레
-  useEffect(() => {
-    const q = query(collection(db, "game_history"), orderBy("created_at", "desc"), limit(500));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      if (!isFirstLoad.current) {
-        snapshot.docChanges().forEach((change) => {
-          if (change.type === "added") {
-            const data = change.doc.data();
-            if (isSoundEnabled && data.result === 'WIN') {
-                fanfareAudioRef.current.currentTime = 0;
-                fanfareAudioRef.current.play().catch(e => {});
-            }
-          }
-        });
-      } else { isFirstLoad.current = false; }
-
-      const historyData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      let winCount = 0;
-      let totalStepScore = 0;
-      let safeHitCount = 0;
-      let streak = 0;
-      
-      historyData.forEach(item => {
-          if (item.result === 'WIN') {
-              winCount++;
-              totalStepScore += item.step; 
-              if (item.step <= 4) safeHitCount++; 
-          }
-      });
-      for (let i = 0; i < historyData.length; i++) {
-          if (historyData[i].result === 'WIN' && historyData[i].step <= 4) streak++; else break;
-      }
-
-      setStats({
-        totalScore: totalStepScore, totalGames: historyData.length,
-        winRate: historyData.length > 0 ? Math.round((winCount / historyData.length) * 100) : 0,
-        safeHitCount, currentStreak: streak, history: historyData
-      });
-    });
-    return () => unsubscribe();
-  }, [isSoundEnabled]);
-
-  const columns = [
-    { title: 'Time', dataIndex: 'created_at', key: 'time', render: (ts) => <span style={{color:'#9ca3af'}}>{ts ? new Date(ts.seconds * 1000).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '-'}</span> },
-    { title: 'Room', dataIndex: 'room_name', key: 'room', render: (text) => <span style={{color:'white', fontWeight:'bold'}}>{text}</span> },
-    { title: 'Pick', dataIndex: 'pick', key: 'pick', align: 'center', render: (pick) => <span style={{fontWeight:'bold', color: pick === 'P' ? '#3b82f6' : '#ef4444'}}>{pick === 'P' ? 'PLAYER' : 'BANKER'}</span> },
-    { title: 'Result', dataIndex: 'result', key: 'result', align: 'center', render: (res) => <Tag color={res === 'WIN' ? 'success' : 'error'}>{res}</Tag> },
-    { title: 'Step', dataIndex: 'step', key: 'step', align: 'right', render: (step) => <span style={{color: step <= 4 ? '#d4af37' : '#ef4444'}}>{step}단계</span> }
-  ];
-
-  if (loading) return <Spin size="large" style={{display:'block', margin:'100px auto'}} />;
-
   return (
-    <Container>
-      <HeaderContainer>
-        <LeftHeader>
-          <DashboardTitle>WHALEBET</DashboardTitle>
-          <SoundToggleBtn onClick={toggleSound} active={isSoundEnabled}>
-            {isSoundEnabled ? <SoundOutlined /> : <MutedOutlined />}
-            {isSoundEnabled ? 'SOUND ON' : 'SOUND OFF'}
-          </SoundToggleBtn>
-        </LeftHeader>
-
-        <RightHeader>
-            {/* ★ 관리자 버튼 (권한 있을 때만 보임) */}
-            {userData && adminRoles.includes(userData.role) && (
-                <Button 
-                    type="primary" 
-                    icon={<CrownOutlined />} 
-                    onClick={() => navigate('/admin')}
-                    style={{ background: '#d4af37', borderColor: '#d4af37', fontWeight: 'bold' }}
-                >
-                    관리자
-                </Button>
-            )}
-            <Button 
-                danger 
-                type="text" 
-                icon={<LogoutOutlined />} 
-                onClick={handleLogout}
-            >
-                나가기
-            </Button>
-        </RightHeader>
-      </HeaderContainer>
-
-      {/* 통계 패널 */}
-      <HistoryPanel>
-        <div style={{textAlign:'center'}}>
-            <div style={{color:'#9ca3af', marginBottom: 5, fontSize:12}}>TOTAL WIN RATE (500G)</div>
-            <Progress type="circle" percent={stats.winRate} width={80} strokeColor="#10b981" trailColor="#374151" format={percent => <span style={{color:'white', fontWeight:'bold'}}>{percent}%</span>} />
+    <DarkLayout>
+      <Sider collapsible collapsed={collapsed} onCollapse={setCollapsed} width={250}>
+        <div style={{ height: 64, margin: 16, background: 'rgba(255, 255, 255, 0.05)', borderRadius: 8, display:'flex', alignItems:'center', justifyContent:'center' }}>
+            <h2 style={{color:'white', margin:0, fontWeight:900, letterSpacing:1, fontSize: collapsed ? 10 : 20}}>{collapsed ? 'WB' : 'WHALEBET'}</h2>
         </div>
-        <div style={{textAlign:'center', borderLeft:'1px solid #374151', paddingLeft: 30}}>
-            <Statistic title={<span style={{color:'#9ca3af', fontSize:12}}>TOTAL WINS (SCORE)</span>} value={stats.totalScore} valueStyle={{ color: '#d4af37', fontWeight:'bold', fontSize: 24 }} prefix={<TrophyOutlined />} suffix={<span style={{fontSize:12, color:'#6b7280', marginLeft: 5}}>pts</span>} />
-        </div>
-        <div style={{textAlign:'center', borderLeft:'1px solid #374151', paddingLeft: 30}}>
-            <Statistic title={<span style={{color:'#9ca3af', fontSize:12}}>SAFETY STREAK</span>} value={stats.currentStreak} valueStyle={{ color: '#ef4444', fontWeight:'bold', fontSize: 24 }} prefix={<FireOutlined />} />
-        </div>
-        <div style={{textAlign:'center', borderLeft:'1px solid #374151', paddingLeft: 30}}>
-             <div style={{color:'#9ca3af', fontSize:12, marginBottom:5}}>SAFETY HIT (Count)</div>
-             <div style={{fontSize: 24, fontWeight:'bold', color: '#3b82f6'}}><AimOutlined style={{marginRight: 8}} />{stats.safeHitCount}</div>
-        </div>
-      </HistoryPanel>
-
-      {/* 대기 Zone */}
-      <div style={{marginBottom: 30}}>
-          <SectionTitle className="gold">
-            <ThunderboltOutlined className="icon" />
-            <h2>Waiting Zone</h2>
-          </SectionTitle>
-          {waitingRooms.length === 0 ? (
-            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={<span style={{color:'#6b7280'}}>패턴 탐색 중...</span>} />
-          ) : (
-            <Row gutter={[20, 20]} justify="center">
-                {waitingRooms.map((room) => (
-                    <Col xs={24} sm={12} md={8} lg={6} xl={6} key={room.id}>
-                        <WaitingCard room={room} />
-                    </Col>
-                ))}
-            </Row>
+        <Menu theme="dark" defaultSelectedKeys={['1']} mode="inline" onClick={(e) => setSelectedKey(e.key)}>
+          <Menu.Item key="1" icon={<DesktopOutlined />}>실시간 픽 (Live)</Menu.Item>
+          <Menu.Item key="2" icon={<GiftOutlined />}>룰렛 게임 (Event)</Menu.Item>
+          
+          {userData && adminRoles.includes(userData.role) && (
+            <Menu.Item key="admin" icon={<CrownOutlined style={{color: '#d4af37'}} />} style={{marginTop: 50, color: '#d4af37', fontWeight:'bold'}} onClick={() => navigate('/admin')}>
+              관리자 페이지
+            </Menu.Item>
           )}
-      </div>
-
-      {/* 배팅 Zone */}
-      <div style={{marginBottom: 30}}>
-          <SectionTitle className="red">
-            <FireOutlined className="icon" />
-            <h2>Active Betting</h2>
-          </SectionTitle>
-          {bettingRooms.length === 0 ? (
-             <div style={{textAlign:'center', color:'#4b5563', padding: 20}}>현재 진행 중인 배팅이 없습니다.</div>
-          ) : (
-            <Row gutter={[20, 20]} justify="center">
-                {bettingRooms.map((room) => (
-                <Col xs={24} sm={12} md={8} lg={6} xl={6} key={room.id}>
-                    <GameCard className="betting">
-                        <div style={{color:'white', fontWeight:'bold', fontSize: 15}}>{room.room_name}</div>
-                        <div style={{textAlign:'center'}}>
-                            <div style={{fontSize:10, color:'#ef4444', marginBottom: 5}}>
-                                <SoundOutlined spin /> BETTING LIVE
-                            </div>
-                            <PickDisplay className={room.pick}>{room.pick === 'P' ? 'PLAYER' : 'BANKER'}</PickDisplay>
-                        </div>
-                        <div style={{display:'flex', justifyContent:'space-between', marginTop:'auto'}}>
-                            <span style={{color:'#10b981', fontSize:12}}><ScanOutlined /> AI-{room.ai_num}</span>
-                            <Tag color="#f50">{room.step}단계 진행 🔥</Tag>
-                        </div>
-                    </GameCard>
-                </Col>
-                ))}
-            </Row>
-          )}
-      </div>
-
-      {/* 히스토리 */}
-      <div style={{marginBottom: 30, background: '#111827', padding: 20, borderRadius: 16, border: '1px solid #374151'}}>
-        <h3 style={{color:'white', marginBottom: 15}}><HistoryOutlined /> Recent Results (Latest 500)</h3>
-        <DarkTable dataSource={stats.history} columns={columns} pagination={{ pageSize: 5, position: ['bottomCenter'] }} rowKey="id" size="middle" />
-      </div>
-
-      <ScanZone>
-        <div className="scan-bar"></div>
-        <ScanOutlined style={{ fontSize: 32, color: '#00e5ff', marginBottom: 15 }} spin />
-        <h3 style={{ color: '#fff', margin: 0 }}>AI Deep Learning Active</h3>
-        <p style={{ color: '#6b7280', marginTop: 10 }}>Analyzing {idleCount} Tables...</p>
-      </ScanZone>
-    </Container>
+        </Menu>
+      </Sider>
+      
+      <Layout className="site-layout">
+        <Header>
+            <div style={{color:'white', fontWeight:'bold'}}>
+                {userData?.role === 'super_admin' && <Tag color="gold">최고관리자</Tag>}
+                {userData?.role === 'distributor' && <Tag color="magenta">총판</Tag>}
+                {userData?.role === 'store' && <Tag color="cyan">매장</Tag>}
+                {userData?.role === 'user' && <Tag color="blue">회원</Tag>}
+                <span style={{marginLeft: 10}}>{myUsername}님 환영합니다.</span>
+            </div>
+            <Button type="text" icon={<LogoutOutlined />} style={{color:'#94a3b8'}} onClick={handleLogout}>Logout</Button>
+        </Header>
+        
+        <Content>
+          {/* 메뉴 선택에 따라 보여주는 컴포넌트가 달라짐 */}
+          {selectedKey === '1' && <Dashboard />}
+          {selectedKey === '2' && <RouletteGame user={userData} />}
+        </Content>
+      </Layout>
+    </DarkLayout>
   );
 };
-
 export default Main;
