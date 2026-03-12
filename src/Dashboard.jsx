@@ -12,7 +12,7 @@ import { db } from '../firebase';
 const BEEP_SOUND_URL = "https://assets.mixkit.co/active_storage/sfx/995/995-preview.mp3"; 
 const FANFARE_SOUND_URL = "https://assets.mixkit.co/active_storage/sfx/2019/2019-preview.mp3";
 
-// --- ✨ 애니메이션 ---
+// --- ✨ 애니메이션 정의 ---
 const pulseGold = keyframes`
   0% { box-shadow: 0 0 0 0 rgba(212, 175, 55, 0.4); border-color: #d4af37; }
   70% { box-shadow: 0 0 0 10px rgba(212, 175, 55, 0); border-color: #ffd700; }
@@ -31,29 +31,20 @@ const scanMove = keyframes`
   100% { background-position: 0% 50%; }
 `;
 
-// --- 🎨 스타일 ---
+// --- 🎨 전체 스타일 컴포넌트 ---
 const Container = styled.div`
-  padding: 20px;
+  padding: 0;
   color: white;
-  max-width: 1400px;
+  max-width: 1600px;
   margin: 0 auto;
 `;
 
 const HeaderContainer = styled.div`
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   margin-bottom: 25px;
   gap: 15px;
-`;
-
-const DashboardTitle = styled.h1`
-  font-size: 24px;
-  font-weight: 900;
-  margin: 0;
-  background: linear-gradient(to right, #fff, #94a3b8);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  letter-spacing: 1px;
 `;
 
 const SoundToggleBtn = styled.button`
@@ -119,7 +110,7 @@ const GameCard = styled.div`
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  height: 250px; /* 높이 넉넉하게 */
+  height: 250px;
   border: 1px solid #4b5563;
   position: relative;
   overflow: visible;
@@ -152,12 +143,11 @@ const PickDisplay = styled.div`
   &.B { color: #ef4444; text-shadow: 0 0 20px rgba(239, 68, 68, 0.5); }
 `;
 
-// 🕒 카운트다운 스타일 (깜빡임 제거, 아주 잘 보이게 수정)
 const CountdownBox = styled.div`
   text-align: center;
-  font-size: 28px; /* 글씨 아주 크게 */
+  font-size: 28px;
   font-weight: 900;
-  color: #fbbf24; /* 밝은 노란색 */
+  color: #fbbf24;
   background: rgba(0, 0, 0, 0.5);
   border: 1px solid #fbbf24;
   border-radius: 8px;
@@ -193,20 +183,19 @@ const ScanZone = styled.div`
   }
 `;
 
+// 테이블 배경 투명 처리 및 스타일링
 const DarkTable = styled(Table)`
-  .ant-table { background: transparent; color: #d1d5db; }
+  .ant-table { background: transparent !important; color: #d1d5db; }
   .ant-table-thead > tr > th { background: #1f2937 !important; color: #9ca3af !important; border-bottom: 1px solid #374151 !important; }
-  .ant-table-tbody > tr > td { border-bottom: 1px solid #1f2937 !important; color: #e5e7eb !important; }
+  .ant-table-tbody > tr > td { border-bottom: 1px solid #374151 !important; color: #e5e7eb !important; background: transparent !important; }
   .ant-table-tbody > tr:hover > td { background: #111827 !important; }
   .ant-pagination-item-link, .ant-pagination-item { background: transparent !important; border-color: #374151 !important; a { color: #9ca3af !important; } }
   .ant-pagination-item-active { border-color: #d4af37 !important; a { color: #d4af37 !important; } }
 `;
 
-// 🟡 대기 카드 (카운트다운 수정됨)
+// 대기 카드 컴포넌트
 const WaitingCard = ({ room }) => {
     const [count, setCount] = useState(3);
-    
-    // 깜빡임 없이 숫자만 정확히 줄어듦
     useEffect(() => {
         const timer = setInterval(() => {
             setCount(prev => (prev > 1 ? prev - 1 : 3));
@@ -245,7 +234,7 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [isSoundEnabled, setIsSoundEnabled] = useState(false);
 
-  // 통계
+  // 통계 state
   const [stats, setStats] = useState({
     totalScore: 0,
     totalGames: 0,
@@ -261,6 +250,7 @@ const Dashboard = () => {
   const fanfareAudioRef = useRef(new Audio(FANFARE_SOUND_URL));
   const isFirstLoad = useRef(true);
 
+  // 사운드 초기화
   useEffect(() => {
     beepAudioRef.current.volume = 0.6;
     fanfareAudioRef.current.volume = 0.8;
@@ -285,19 +275,16 @@ const Dashboard = () => {
     }
   };
 
-  // 🔊 [핵심 수정] 배팅 중일 때 삐빅 소리 (Loop 방식 말고 1초마다 강제 재생)
+  // 배팅 중 비프음 재생
   useEffect(() => {
     let intervalId = null;
 
     if (isSoundEnabled && bettingRooms.length > 0) {
-        // 즉시 재생
         const playBeep = () => {
              beepAudioRef.current.currentTime = 0;
              beepAudioRef.current.play().catch(e => console.log("Sound error:", e));
         };
         playBeep();
-        
-        // 1초마다 반복 (loop 속성보다 이게 훨씬 안정적임)
         intervalId = setInterval(playBeep, 1000); 
     }
 
@@ -307,7 +294,7 @@ const Dashboard = () => {
     };
   }, [bettingRooms.length, isSoundEnabled]);
 
-  // 방 상태 구독
+  // 실시간 방 데이터 수신
   useEffect(() => {
     const q = query(collection(db, "rooms"), orderBy("updated_at", "desc"));
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -325,7 +312,7 @@ const Dashboard = () => {
     return () => unsubscribe();
   }, [userEntryLevel]);
 
-  // 히스토리 & 빵빠레
+  // 히스토리 및 통계, 빵빠레
   useEffect(() => {
     const q = query(collection(db, "game_history"), orderBy("created_at", "desc"), limit(500));
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -376,7 +363,13 @@ const Dashboard = () => {
     { title: 'Time', dataIndex: 'created_at', key: 'time', render: (ts) => <span style={{color:'#9ca3af'}}>{ts ? new Date(ts.seconds * 1000).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '-'}</span> },
     { title: 'Room', dataIndex: 'room_name', key: 'room', render: (text) => <span style={{color:'white', fontWeight:'bold'}}>{text}</span> },
     { title: 'Pick', dataIndex: 'pick', key: 'pick', align: 'center', render: (pick) => <span style={{fontWeight:'bold', color: pick === 'P' ? '#3b82f6' : '#ef4444'}}>{pick === 'P' ? 'PLAYER' : 'BANKER'}</span> },
-    { title: 'Result', dataIndex: 'result', key: 'result', align: 'center', render: (res) => <Tag color={res === 'WIN' ? 'success' : 'error'}>{res}</Tag> },
+    { 
+        title: 'Result', 
+        dataIndex: 'result', 
+        key: 'result', 
+        align: 'center', 
+        render: (res) => <Tag color={res === 'WIN' ? '#14532d' : '#7f1d1d'} style={{color: res === 'WIN' ? '#4ade80' : '#f87171', border: '1px solid', borderColor: res === 'WIN' ? '#22c55e' : '#ef4444', fontWeight:'bold', padding: '2px 10px'}}>{res}</Tag> 
+    },
     { title: 'Step', dataIndex: 'step', key: 'step', align: 'right', render: (step) => <span style={{color: step <= 4 ? '#d4af37' : '#ef4444'}}>{step}단계</span> }
   ];
 
@@ -385,7 +378,6 @@ const Dashboard = () => {
   return (
     <Container>
       <HeaderContainer>
-        <DashboardTitle>WHALEBET DASHBOARD</DashboardTitle>
         <SoundToggleBtn onClick={toggleSound} active={isSoundEnabled}>
           {isSoundEnabled ? <SoundOutlined /> : <MutedOutlined />}
           {isSoundEnabled ? 'SOUND ON' : 'SOUND OFF'}
@@ -407,7 +399,6 @@ const Dashboard = () => {
         <div style={{textAlign:'center', borderLeft:'1px solid #374151', paddingLeft: 30}}>
              <div style={{color:'#9ca3af', fontSize:12, marginBottom:5}}>SAFETY HIT (Count)</div>
              <div style={{fontSize: 24, fontWeight:'bold', color: '#3b82f6'}}><AimOutlined style={{marginRight: 8}} />{stats.safeHitCount}</div>
-             <div style={{fontSize: 12, color: '#6b7280'}}>Hits Count</div>
         </div>
       </HistoryPanel>
 

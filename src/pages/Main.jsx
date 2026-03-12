@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Layout, Menu, Button, Modal, Tag } from 'antd';
 import { 
-  DesktopOutlined, GiftOutlined, LogoutOutlined, CrownOutlined 
+  DesktopOutlined, GiftOutlined, LogoutOutlined, CrownOutlined, SettingOutlined 
 } from '@ant-design/icons';
 import { doc, onSnapshot } from "firebase/firestore";
 import { db } from '../firebase'; 
@@ -26,7 +26,7 @@ const DarkLayout = styled(Layout)`
 const Main = () => {
   const navigate = useNavigate();
   const [collapsed, setCollapsed] = useState(false);
-  const [selectedKey, setSelectedKey] = useState('1'); // 메뉴 선택 상태 (1: 픽, 2: 룰렛)
+  const [selectedKey, setSelectedKey] = useState('1'); 
   
   // 유저 정보 & 보안
   const [userData, setUserData] = useState(null);
@@ -58,6 +58,7 @@ const Main = () => {
         <Menu theme="dark" defaultSelectedKeys={['1']} mode="inline" onClick={(e) => setSelectedKey(e.key)}>
           <Menu.Item key="1" icon={<DesktopOutlined />}>실시간 픽 (Live)</Menu.Item>
           <Menu.Item key="2" icon={<GiftOutlined />}>룰렛 게임 (Event)</Menu.Item>
+          <Menu.Item key="3" icon={<SettingOutlined />}>전략 설정</Menu.Item>
           
           {userData && adminRoles.includes(userData.role) && (
             <Menu.Item key="admin" icon={<CrownOutlined style={{color: '#d4af37'}} />} style={{marginTop: 50, color: '#d4af37', fontWeight:'bold'}} onClick={() => navigate('/admin')}>
@@ -83,6 +84,7 @@ const Main = () => {
           {/* 메뉴 선택에 따라 보여주는 컴포넌트가 달라짐 */}
           {selectedKey === '1' && <Dashboard />}
           {selectedKey === '2' && <RouletteGame user={userData} />}
+          {selectedKey === '3' && <div style={{color:'white', textAlign:'center', marginTop:100}}><h2>🔧 전략 설정 페이지 준비중</h2></div>}
         </Content>
       </Layout>
     </DarkLayout>

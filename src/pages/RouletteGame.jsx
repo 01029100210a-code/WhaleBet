@@ -4,12 +4,11 @@ import { GiftOutlined } from '@ant-design/icons';
 import RoulettePro from 'react-roulette-pro';
 import 'react-roulette-pro/dist/index.css';
 import styled from 'styled-components';
-import { doc, getDoc, updateDoc, setDoc, Timestamp, collection, addDoc } from 'firebase/firestore';
-import { db } from '../firebase';
+import { doc, getDoc, updateDoc, Timestamp, collection, addDoc } from 'firebase/firestore';
+import { db } from '../firebase'; 
 
 const { Title, Text } = Typography;
 
-// --- 🎨 스타일 정의 ---
 const GameContainer = styled.div`
   display: flex;
   flex-direction: column;
@@ -29,65 +28,26 @@ const GameCard = styled(Card)`
   text-align: center;
   box-shadow: 0 0 50px rgba(212, 175, 55, 0.3);
 
-  /* 룰렛 창 디자인 */
   .roulette-pro-regular-image-wrapper {
     border: none;
     background: transparent;
-    transform: scale(1.1); /* 아이콘 좀 더 크게 */
+    transform: scale(1.1);
   }
   
-  /* 중앙 선택선 (빨간색 화살표 역할) */
   .roulette-pro-regular-selector-image {
     z-index: 10;
     border-top: 20px solid #ef4444;
   }
 `;
 
-// --- 💎 럭셔리 아이콘 목록 ---
 const prizes = [
-  {
-    // 💣 꽝 (폭탄)
-    image: 'https://cdn-icons-png.flaticon.com/512/9492/9492863.png', 
-    text: '꽝',
-    type: 'boom',
-    hours: 0,
-    bg: '#2d0a0a', // 어두운 빨강
-  },
-  {
-    // 🥉 1시간 (동전 주머니)
-    image: 'https://cdn-icons-png.flaticon.com/512/9492/9492743.png', 
-    text: '1시간',
-    type: 'win',
-    hours: 1,
-    bg: '#1e3a8a', // 어두운 파랑
-  },
-  {
-    // 🥈 3시간 (보물상자)
-    image: 'https://cdn-icons-png.flaticon.com/512/9492/9492985.png',
-    text: '3시간',
-    type: 'win',
-    hours: 3,
-    bg: '#064e3b', // 어두운 초록
-  },
-  {
-    // 👑 1일 (왕관/다이아)
-    image: 'https://cdn-icons-png.flaticon.com/512/9492/9492924.png', 
-    text: '1일(VIP)',
-    type: 'jackpot',
-    hours: 24,
-    bg: '#713f12', // 어두운 골드
-  },
-  {
-    // 🏴‍☠️ 꽝 (해골)
-    image: 'https://cdn-icons-png.flaticon.com/512/9492/9492878.png',
-    text: '다음 기회에',
-    type: 'boom',
-    hours: 0,
-    bg: '#171717', // 검정
-  },
+  { image: 'https://cdn-icons-png.flaticon.com/512/9492/9492863.png', text: '꽝', type: 'boom', hours: 0 },
+  { image: 'https://cdn-icons-png.flaticon.com/512/9492/9492743.png', text: '1시간', type: 'win', hours: 1 },
+  { image: 'https://cdn-icons-png.flaticon.com/512/9492/9492985.png', text: '3시간', type: 'win', hours: 3 },
+  { image: 'https://cdn-icons-png.flaticon.com/512/9492/9492924.png', text: '1일(VIP)', type: 'jackpot', hours: 24 },
+  { image: 'https://cdn-icons-png.flaticon.com/512/9492/9492878.png', text: '다음 기회에', type: 'boom', hours: 0 },
 ];
 
-// 🔥 [속도 핵심] 목록을 40배로 늘림 -> 이동 거리가 길어져서 엄청 빨라짐
 const reproductionArray = (array = [], length = 40) => {
   const result = [];
   for (let i = 0; i < length; i++) {
@@ -96,7 +56,6 @@ const reproductionArray = (array = [], length = 40) => {
   return result;
 };
 
-// 실제 룰렛 데이터 생성
 const prizeList = reproductionArray(prizes, 40).map((item) => ({
   ...item,
   id: Math.random().toString(36).substr(2, 9),
@@ -111,20 +70,17 @@ const RouletteGame = ({ user }) => {
 
   useEffect(() => {
     checkLastPlay();
-  }, []);
+  }, [user]);
 
   const checkLastPlay = async () => {
+    if(!user) return;
     const userRef = doc(db, "users", user.username);
     const userSnap = await getDoc(userRef);
     const userData = userSnap.data();
 
     if (userData.lastGamePlayed) {
-      const lastPlay = userData.lastGamePlayed.toDate();
-      const now = new Date();
-      // 🔥 테스트용 5초 쿨타임
-      const diffSeconds = (now - lastPlay) / 1000;
-
-      if (diffSeconds < 5) { 
+      const diffSeconds = (new Date() - userData.lastGamePlayed.toDate()) / 1000;
+      if (diffSeconds < 5) { // 5초 쿨타임
         setCanPlay(false);
       } else {
         setCanPlay(true);
@@ -141,9 +97,8 @@ const RouletteGame = ({ user }) => {
     setLoading(true);
     setStart(false);
 
-    // 🎲 확률 조작
     const random = Math.random() * 100;
-    let winType = 0; // 0:꽝, 1:1H, 2:3H, 3:24H
+    let winType = 0; 
 
     if (random < 60) winType = 0;        
     else if (random < 85) winType = 4;   
@@ -151,28 +106,21 @@ const RouletteGame = ({ user }) => {
     else if (random < 99) winType = 2;   
     else winType = 3;                    
 
-    // 🔥 [속도 핵심 2] 당첨 번호를 리스트의 "맨 끝부분"에서 고름
-    // 그래야 룰렛이 처음부터 끝까지 미친듯이 달려감
     const totalLength = prizeList.length;
-    // 전체 길이의 80% ~ 90% 지점에 있는 아이템 중 하나를 타겟팅
     const baseIndex = Math.floor(totalLength * 0.85); 
     
-    // baseIndex 이후에서 winType과 일치하는 첫 번째 인덱스 찾기
     let targetIndex = -1;
     for(let i = baseIndex; i < totalLength; i++) {
-        // 원래 prizes 배열의 순서대로 반복되므로 (i % prizes.length)가 타입 인덱스임
         if ((i % prizes.length) === winType) {
             targetIndex = i;
             break;
         }
     }
     
-    // 만약 못 찾으면 안전장치로 중앙값 사용
     if(targetIndex === -1) targetIndex = Math.floor(totalLength / 2);
 
     setPrizeIndex(targetIndex);
 
-    // 0.1초 뒤 발사
     setTimeout(() => {
         setStart(true);
     }, 100);
@@ -188,9 +136,6 @@ const RouletteGame = ({ user }) => {
         await updateDoc(userRef, {
             lastGamePlayed: Timestamp.now()
         });
-
-        let msgContent = "";
-        let msgTitle = "";
 
         if (prize.hours > 0) {
             const userSnap = await getDoc(userRef);
@@ -215,14 +160,9 @@ const RouletteGame = ({ user }) => {
                 created_at: Timestamp.now()
             });
 
-            msgTitle = '🎉 Congratulation!';
-            msgContent = `[${prize.text}] 당첨! 이용권이 연장되었습니다.`;
-            
-            Modal.success({ title: msgTitle, content: msgContent });
+            Modal.success({ title: '🎉 Congratulation!', content: `[${prize.text}] 당첨! 이용권이 연장되었습니다.` });
         } else {
-            msgTitle = 'Oops...';
-            msgContent = '아쉽게도 꽝입니다. 다음 기회에!';
-            Modal.error({ title: msgTitle, content: msgContent });
+            Modal.error({ title: 'Oops...', content: '아쉽게도 꽝입니다. 다음 기회에!' });
         }
 
         setTimeout(() => {
@@ -230,14 +170,15 @@ const RouletteGame = ({ user }) => {
             setLoading(false);
             setResetKey(prev => prev + 1); 
             checkLastPlay();
-            window.location.reload(); 
-        }, 3000); // 결과창 3초 뒤 리셋
+        }, 3000); 
 
     } catch (e) {
         console.error(e);
         message.error("오류 발생");
     }
   };
+
+  if(!user) return <div>Loading...</div>;
 
   return (
     <GameContainer>
@@ -256,7 +197,7 @@ const RouletteGame = ({ user }) => {
             prizeIndex={prizeIndex}
             start={start}
             onPrizeDefined={handlePrizeDefined}
-            spinningTime={8} // 🔥 8초 동안 초고속 회전
+            spinningTime={8}
             options={{ stopInCenter: true }}
             defaultDesignOptions={{ prizesWithText: true }} 
           />
@@ -283,10 +224,6 @@ const RouletteGame = ({ user }) => {
         >
             {canPlay ? "SPIN NOW!" : "Cooling Down..."}
         </Button>
-
-        <div style={{marginTop: 20, color:'#6b7280', fontSize: 12}}>
-            * 테스트 모드: 5초마다 재참여 가능
-        </div>
       </GameCard>
     </GameContainer>
   );
