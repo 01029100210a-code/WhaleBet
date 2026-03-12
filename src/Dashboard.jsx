@@ -1,225 +1,522 @@
-import React, { useState, useEffect } from 'react';
-import { Card, Row, Col, Typography, Tag, Badge, Button, Spin, Empty } from 'antd';
-import { LogoutOutlined, FireOutlined, ThunderboltOutlined, CheckCircleOutlined } from '@ant-design/icons';
+import React, { useState, useEffect, useRef } from 'react';
+import { Row, Col, Spin, Empty, Tag, Statistic, Progress, Table } from 'antd';
+import { 
+  TrophyOutlined, ThunderboltOutlined, ScanOutlined, FireOutlined, 
+  AimOutlined, HistoryOutlined, SoundOutlined, MutedOutlined 
+} from '@ant-design/icons';
 import styled, { keyframes } from 'styled-components';
-import { collection, onSnapshot, query, orderBy } from "firebase/firestore";
-import { db } from './firebase'; // firebase.js에서 db 가져오기
+import { collection, onSnapshot, query, orderBy, limit } from "firebase/firestore";
+import { db } from '../firebase'; // firebase 경로가 맞는지 확인 (보통 ../firebase 또는 ./firebase)
 
-const { Title, Text } = Typography;
+// --- 🎵 사운드 파일 ---
+const TENSION_SOUND_URL = "https://assets.mixkit.co/active_storage/sfx/209/209-preview.mp3"; 
+const FANFARE_SOUND_URL = "https://assets.mixkit.co/active_storage/sfx/2019/2019-preview.mp3";
 
-// --- 스타일 정의 ---
-const DashboardContainer = styled.div`
-  min-height: 100vh;
+// --- ✨ 애니메이션 ---
+const pulseGold = keyframes`
+  0% { box-shadow: 0 0 0 0 rgba(212, 175, 55, 0.4); border-color: #d4af37; }
+  70% { box-shadow: 0 0 0 10px rgba(212, 175, 55, 0); border-color: #ffd700; }
+  100% { box-shadow: 0 0 0 0 rgba(212, 175, 55, 0); border-color: #374151; }
+`;
+
+const pulseRed = keyframes`
+  0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); border-color: #ef4444; }
+  70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); border-color: #ef4444; }
+  100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); border-color: #374151; }
+`;
+
+const scanMove = keyframes`
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+`;
+
+// --- 🎨 스타일 ---
+const Container = styled.div`
   padding: 20px;
-  background-color: #0b1219;
-  color: #fff;
+  color: white;
+  max-width: 1400px;
+  margin: 0 auto;
 `;
 
-const TopBar = styled.div`
+// 🔹 상단 헤더 (타이틀 + 소리 버튼)
+const HeaderContainer = styled.div`
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  margin-bottom: 20px;
-  border-bottom: 1px solid #2a3a4d;
-  padding-bottom: 15px;
+  margin-bottom: 25px;
+  gap: 15px; /* 타이틀과 버튼 사이 간격 */
 `;
 
-// 반짝이는 애니메이션 (패턴 감지 시)
-const pulse = keyframes`
-  0% { box-shadow: 0 0 0 0 rgba(0, 229, 255, 0.7); border-color: #00e5ff; }
-  70% { box-shadow: 0 0 0 10px rgba(0, 229, 255, 0); border-color: #00e5ff; }
-  100% { box-shadow: 0 0 0 0 rgba(0, 229, 255, 0); border-color: #2a3a4d; }
+const DashboardTitle = styled.h1`
+  font-size: 24px;
+  font-weight: 900;
+  margin: 0;
+  background: linear-gradient(to right, #fff, #94a3b8);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  letter-spacing: 1px;
 `;
 
-const RoomCard = styled(Card)`
-  background: #151e29;
-  border: 1px solid #2a3a4d;
-  border-radius: 8px;
-  margin-bottom: 16px;
-  transition: all 0.3s;
-  
-  // 상태별 테두리 색상 및 애니메이션
-  &.status-betting {
-    border-color: #ff4d4f;
-    box-shadow: 0 0 15px rgba(255, 77, 79, 0.3);
-  }
-  &.status-waiting {
-    animation: ${pulse} 2s infinite;
+const SoundToggleBtn = styled.button`
+  background: ${props => props.active ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)'};
+  border: 1px solid ${props => props.active ? '#10b981' : '#ef4444'};
+  color: ${props => props.active ? '#10b981' : '#ef4444'};
+  padding: 5px 12px;
+  border-radius: 20px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: bold;
+  transition: all 0.3s ease;
+  outline: none;
+
+  &:hover {
+    background: ${props => props.active ? 'rgba(16, 185, 129, 0.4)' : 'rgba(239, 68, 68, 0.4)'};
   }
 
-  .ant-card-head {
-    border-bottom: 1px solid #2a3a4d;
-    color: #fff;
-    min-height: 40px;
-    padding: 0 12px;
-  }
-  .ant-card-body {
-    padding: 12px;
+  /* 소리가 꺼져있을 때 깜빡임 효과 (눌러달라고 유도) */
+  animation: ${props => !props.active ? pulseRed : 'none'} 2s infinite;
+`;
+
+const HistoryPanel = styled.div`
+  background: linear-gradient(145deg, #1f2937, #111827);
+  border-radius: 16px;
+  padding: 20px;
+  margin-bottom: 30px;
+  border: 1px solid #374151;
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+
+  @media (max-width: 768px) {
+    flex-direction: column;
+    gap: 20px;
   }
 `;
 
-// 원매(그림) 그리드
-const RoadMapGrid = styled.div`
-  display: grid;
-  grid-template-columns: repeat(12, 1fr); // 12칸
-  gap: 2px;
-  margin-top: 10px;
-  background: #0f1621;
-  padding: 4px;
-  border-radius: 4px;
-`;
-
-const Bead = styled.div`
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
+const SectionTitle = styled.div`
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 10px;
-  font-weight: bold;
-  color: #fff;
+  margin-bottom: 20px;
   
-  &.P { background-color: #1890ff; border: 1px solid #0050b3; }
-  &.B { background-color: #f5222d; border: 1px solid #a8071a; }
-  &.T { background-color: #52c41a; border: 1px solid #237804; }
+  h2 {
+    margin: 0;
+    color: white;
+    font-size: 20px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+  .icon { font-size: 20px; margin-right: 10px; }
+  &.gold { color: #d4af37; h2 { text-shadow: 0 0 10px rgba(212, 175, 55, 0.3); } }
+  &.red { color: #ef4444; h2 { text-shadow: 0 0 10px rgba(239, 68, 68, 0.3); } }
 `;
 
-// --- 메인 컴포넌트 ---
-const Dashboard = ({ onLogout, user }) => {
-  const [rooms, setRooms] = useState([]);
+const GameCard = styled.div`
+  background-color: #1f2937;
+  border-radius: 16px;
+  padding: 24px 20px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  height: 200px;
+  border: 1px solid #4b5563;
+  position: relative;
+  overflow: visible;
+  transition: transform 0.3s ease;
+
+  &:hover { transform: translateY(-5px); }
+
+  &.waiting {
+    border-color: #d4af37;
+    animation: ${pulseGold} 2s infinite;
+    background: linear-gradient(145deg, #1f2937 0%, #292524 100%);
+  }
+
+  &.betting {
+    border-color: #ef4444;
+    animation: ${pulseRed} 1.5s infinite;
+    background: linear-gradient(145deg, #1f2937 0%, #450a0a 100%);
+  }
+`;
+
+const PickDisplay = styled.div`
+  font-size: 34px;
+  font-weight: 900;
+  letter-spacing: -1px;
+  text-align: center;
+  margin: 15px 0;
+  line-height: 1.2;
+  
+  &.P { color: #3b82f6; text-shadow: 0 0 20px rgba(59, 130, 246, 0.5); }
+  &.B { color: #ef4444; text-shadow: 0 0 20px rgba(239, 68, 68, 0.5); }
+`;
+
+const ScanZone = styled.div`
+  background: #000;
+  border: 1px dashed #374151;
+  border-radius: 12px;
+  padding: 20px;
+  text-align: center;
+  margin-top: 30px;
+  opacity: 0.6;
+
+  .scan-bar {
+    height: 2px;
+    width: 100%;
+    background: linear-gradient(90deg, transparent, #00e5ff, transparent);
+    background-size: 200% 100%;
+    animation: ${scanMove} 2s linear infinite;
+    margin-bottom: 10px;
+  }
+`;
+
+const DarkTable = styled(Table)`
+  .ant-table {
+    background: transparent;
+    color: #d1d5db;
+  }
+  .ant-table-thead > tr > th {
+    background: #1f2937 !important;
+    color: #9ca3af !important;
+    border-bottom: 1px solid #374151 !important;
+  }
+  .ant-table-tbody > tr > td {
+    border-bottom: 1px solid #1f2937 !important;
+    color: #e5e7eb !important;
+  }
+  .ant-table-tbody > tr:hover > td {
+    background: #111827 !important;
+  }
+  .ant-pagination-item-link, .ant-pagination-item {
+    background: transparent !important;
+    border-color: #374151 !important;
+    a { color: #9ca3af !important; }
+  }
+  .ant-pagination-item-active {
+    border-color: #d4af37 !important;
+    a { color: #d4af37 !important; }
+  }
+`;
+
+// 🔥 이름 변경: LivePicks -> Dashboard
+const Dashboard = () => {
+  const [waitingRooms, setWaitingRooms] = useState([]);
+  const [bettingRooms, setBettingRooms] = useState([]);
+  const [idleCount, setIdleCount] = useState(0);
   const [loading, setLoading] = useState(true);
+  
+  // 🔊 소리 활성화 상태 (기본값: false - 브라우저 정책 때문)
+  const [isSoundEnabled, setIsSoundEnabled] = useState(false);
 
-  // 🔥 [핵심] 파이어베이스 실시간 구독 (Real-time Listener)
+  const [stats, setStats] = useState({
+    totalScore: 0,
+    totalGames: 0,
+    winRate: 0,
+    safeHitCount: 0,
+    currentStreak: 0,
+    history: []
+  });
+
+  const userEntryLevel = parseInt(localStorage.getItem('entryLevel')) || 1; 
+
+  // 🎵 오디오 Refs
+  const tensionAudioRef = useRef(new Audio(TENSION_SOUND_URL));
+  const fanfareAudioRef = useRef(new Audio(FANFARE_SOUND_URL));
+  const isFirstLoad = useRef(true);
+
   useEffect(() => {
-    // rooms 컬렉션을 구독합니다.
-    const q = query(collection(db, "rooms"), orderBy("updated_at", "desc"));
-    
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const roomData = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-
-      // 우선순위 정렬: 배팅중(1) -> 대기중(2) -> 나머지
-      const sortedRooms = roomData.sort((a, b) => {
-        const scoreA = getPriorityScore(a.phase);
-        const scoreB = getPriorityScore(b.phase);
-        return scoreB - scoreA; // 점수 높은 순
-      });
-
-      setRooms(sortedRooms);
-      setLoading(false);
-    });
-
-    return () => unsubscribe(); // 컴포넌트 꺼질 때 구독 해제
+    tensionAudioRef.current.volume = 0.5;
+    fanfareAudioRef.current.volume = 0.7;
   }, []);
 
-  // 정렬 점수 계산 함수
-  const getPriorityScore = (phase) => {
-    if (phase === 'BETTING') return 3;
-    if (phase === 'WAITING') return 2;
-    return 1;
+  // 🔊 [기능] 소리 토글 버튼 클릭 핸들러
+  const toggleSound = () => {
+    if (!isSoundEnabled) {
+      // 소리를 켤 때, 강제로 짧게 재생했다 멈춰서 브라우저 권한을 획득함 (매우 중요)
+      tensionAudioRef.current.play().then(() => {
+        tensionAudioRef.current.pause();
+        tensionAudioRef.current.currentTime = 0;
+      }).catch(() => {});
+      
+      fanfareAudioRef.current.play().then(() => {
+        fanfareAudioRef.current.pause();
+        fanfareAudioRef.current.currentTime = 0;
+      }).catch(() => {});
+      
+      setIsSoundEnabled(true);
+    } else {
+      setIsSoundEnabled(false);
+      tensionAudioRef.current.pause();
+      fanfareAudioRef.current.pause();
+    }
   };
 
-  // 카드 상태에 따른 클래스 이름 반환
-  const getCardClass = (phase) => {
-    if (phase === 'BETTING') return 'status-betting';
-    if (phase === 'WAITING') return 'status-waiting';
-    return '';
-  };
+  // 🔊 [사운드 1] 긴장감 사운드 (배팅 중일 때 3초 간격)
+  useEffect(() => {
+    let intervalId = null;
 
-  // 픽 텍스트 변환 (P -> 플레이어)
-  const renderPick = (pick, phase) => {
-    if (!pick) return <Text type="secondary">-</Text>;
-    const color = pick === 'P' ? '#1890ff' : '#f5222d';
-    const text = pick === 'P' ? 'PLAYER' : 'BANKER';
-    
-    if (phase === 'IDLE') return <Text type="secondary">분석중...</Text>;
+    // 소리가 켜져있고(isSoundEnabled) & 배팅 중인 방이 있을 때만
+    if (isSoundEnabled && bettingRooms.length > 0) {
+      const playTension = () => {
+        if (tensionAudioRef.current.paused) {
+          tensionAudioRef.current.currentTime = 0;
+          tensionAudioRef.current.play().catch(e => console.log("Sound Blocked:", e));
+        }
+      };
 
-    return (
-      <Tag color={color} style={{ fontSize: '14px', padding: '4px 10px', fontWeight: 'bold' }}>
-        {phase === 'WAITING' ? `[대기] ${text}` : `[진입] ${text}`}
-      </Tag>
+      playTension();
+      intervalId = setInterval(playTension, 3000);
+    } else {
+      if(intervalId) clearInterval(intervalId);
+      tensionAudioRef.current.pause();
+      tensionAudioRef.current.currentTime = 0;
+    }
+
+    return () => {
+      if(intervalId) clearInterval(intervalId);
+      tensionAudioRef.current.pause();
+    };
+  }, [bettingRooms.length, isSoundEnabled]); // 의존성에 isSoundEnabled 추가
+
+  // 1. 방 상태 구독
+  useEffect(() => {
+    const q = query(collection(db, "rooms"), orderBy("updated_at", "desc"));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const roomData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const waiting = roomData.filter(r => r.phase === 'WAITING');
+      const betting = roomData.filter(r => r.phase === 'BETTING' && r.step >= userEntryLevel);
+      const idle = roomData.length - waiting.length - betting.length;
+      
+      betting.sort((a, b) => b.step - a.step);
+
+      setWaitingRooms(waiting);
+      setBettingRooms(betting);
+      setIdleCount(idle);
+      setLoading(false);
+    });
+    return () => unsubscribe();
+  }, [userEntryLevel]);
+
+  // 2. 🔥 히스토리 & 통계
+  useEffect(() => {
+    const q = query(
+        collection(db, "game_history"), 
+        orderBy("created_at", "desc"),
+        limit(100) 
     );
-  };
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      // 🔊 [사운드 2] 빵빠레 (새로운 승리 감지)
+      if (!isFirstLoad.current) {
+        snapshot.docChanges().forEach((change) => {
+          if (change.type === "added") {
+            const data = change.doc.data();
+            // 소리가 켜져있을 때만 재생
+            if (isSoundEnabled && data.result === 'WIN') {
+                fanfareAudioRef.current.currentTime = 0;
+                fanfareAudioRef.current.play().catch(e => console.log("Fanfare Blocked:", e));
+            }
+          }
+        });
+      } else {
+        isFirstLoad.current = false;
+      }
+
+      const historyData = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+      }));
+
+      // 통계 계산
+      let winCount = 0;
+      let totalStepScore = 0;
+      let safeHitCount = 0;
+      let totalGames = historyData.length;
+      
+      historyData.forEach(item => {
+          if (item.result === 'WIN') {
+              winCount++;
+              totalStepScore += item.step; 
+              if (item.step <= 4) safeHitCount++; 
+          }
+      });
+
+      let streak = 0;
+      for (let i = 0; i < historyData.length; i++) {
+          const item = historyData[i];
+          if (item.result === 'WIN' && item.step <= 4) streak++;
+          else break;
+      }
+
+      const winRate = totalGames > 0 ? Math.round((winCount / totalGames) * 100) : 0;
+
+      setStats({
+        totalScore: totalStepScore,
+        totalGames: totalGames,
+        winRate: winRate,
+        safeHitCount: safeHitCount,
+        currentStreak: streak,
+        history: historyData
+      });
+    });
+
+    return () => unsubscribe();
+  }, [isSoundEnabled]); // 소리 상태가 바뀌어도 동작하도록 의존성 추가
+
+  const columns = [
+    { title: 'Time', dataIndex: 'created_at', key: 'time', render: (ts) => <span style={{color:'#9ca3af'}}>{ts ? new Date(ts.seconds * 1000).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '-'}</span> },
+    { title: 'Room', dataIndex: 'room_name', key: 'room', render: (text) => <span style={{color:'white', fontWeight:'bold'}}>{text}</span> },
+    { title: 'Pick', dataIndex: 'pick', key: 'pick', align: 'center', render: (pick) => <span style={{fontWeight:'bold', color: pick === 'P' ? '#3b82f6' : '#ef4444'}}>{pick === 'P' ? 'PLAYER' : 'BANKER'}</span> },
+    { title: 'Result', dataIndex: 'result', key: 'result', align: 'center', render: (res) => <Tag color={res === 'WIN' ? 'success' : 'error'}>{res}</Tag> },
+    { title: 'Step', dataIndex: 'step', key: 'step', align: 'right', render: (step) => <span style={{color: step <= 4 ? '#d4af37' : '#ef4444'}}>{step}단계</span> }
+  ];
+
+  if (loading) return <Spin size="large" style={{display:'block', margin:'100px auto'}} />;
 
   return (
-    <DashboardContainer>
-      <TopBar>
-        <div>
-          <Title level={3} style={{ color: '#fff', margin: 0 }}>
-             WhaleBet Dashboard <Tag color="gold">VIP</Tag>
-          </Title>
-          <Text type="secondary">Welcome, {user?.username || 'Guest'}</Text>
+    <Container>
+      
+      {/* 🔹 [헤더] 타이틀 + 소리 버튼 */}
+      <HeaderContainer>
+        <DashboardTitle>WHALEBET DASHBOARD</DashboardTitle>
+        <SoundToggleBtn onClick={toggleSound} active={isSoundEnabled}>
+          {isSoundEnabled ? <SoundOutlined /> : <MutedOutlined />}
+          {isSoundEnabled ? 'SOUND ON' : 'SOUND OFF'}
+        </SoundToggleBtn>
+      </HeaderContainer>
+
+      {/* 1. 통계 패널 */}
+      <HistoryPanel>
+        <div style={{textAlign:'center'}}>
+            <div style={{color:'#9ca3af', marginBottom: 5, fontSize:12}}>TOTAL WIN RATE</div>
+            <Progress 
+                type="circle" 
+                percent={stats.winRate} 
+                width={80} 
+                strokeColor="#10b981"  
+                trailColor="#374151"
+                format={percent => <span style={{color:'white', fontWeight:'bold'}}>{percent}%</span>} 
+            />
         </div>
-        <Button type="primary" danger icon={<LogoutOutlined />} onClick={onLogout}>
-          LOGOUT
-        </Button>
-      </TopBar>
-
-      {/* 로딩 중일 때 */}
-      {loading && (
-        <div style={{ textAlign: 'center', marginTop: 100 }}>
-          <Spin size="large" />
-          <p style={{ marginTop: 10, color: '#aaa' }}>실시간 데이터 연결 중...</p>
+        
+        <div style={{textAlign:'center', borderLeft:'1px solid #374151', paddingLeft: 30}}>
+            <Statistic 
+                title={<span style={{color:'#9ca3af', fontSize:12}}>TOTAL WINS (SCORE)</span>} 
+                value={stats.totalScore} 
+                valueStyle={{ color: '#d4af37', fontWeight:'bold', fontSize: 24 }} 
+                prefix={<TrophyOutlined />} 
+                suffix={<span style={{fontSize:12, color:'#6b7280', marginLeft: 5}}>pts</span>}
+            />
         </div>
-      )}
 
-      {/* 데이터가 없을 때 */}
-      {!loading && rooms.length === 0 && (
-        <Empty description={<span style={{color:'#aaa'}}>현재 활성화된 방이 없습니다. 크롤러를 켜주세요!</span>} />
-      )}
+        <div style={{textAlign:'center', borderLeft:'1px solid #374151', paddingLeft: 30}}>
+            <Statistic 
+                title={<span style={{color:'#9ca3af', fontSize:12}}>SAFETY STREAK</span>} 
+                value={stats.currentStreak} 
+                valueStyle={{ color: '#ef4444', fontWeight:'bold', fontSize: 24 }} 
+                prefix={<FireOutlined />} 
+            />
+        </div>
 
-      {/* 방 목록 카드 리스트 */}
-      <Row gutter={[16, 16]}>
-        {rooms.map((room) => (
-          <Col xs={24} sm={12} md={8} lg={6} key={room.id}>
-            <RoomCard 
-              title={room.room_name} 
-              className={getCardClass(room.phase)}
-              extra={
-                room.phase === 'BETTING' ? <Badge status="processing" text={<span style={{color:'#ff4d4f'}}>배팅중</span>} /> :
-                room.phase === 'WAITING' ? <Badge status="warning" text={<span style={{color:'#00e5ff'}}>진입대기</span>} /> :
-                <Badge status="default" text={<span style={{color:'#aaa'}}>탐색중</span>} />
-              }
-            >
-              {/* 1. 상태 메시지 & AI 번호 */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
-                <Text style={{ color: '#fff' }}>AI-{room.ai_num || '00'}</Text>
-                <Text type="secondary" style={{ fontSize: 12 }}>{room.updated_at ? 'Live' : 'Offline'}</Text>
-              </div>
+        <div style={{textAlign:'center', borderLeft:'1px solid #374151', paddingLeft: 30}}>
+             <div style={{color:'#9ca3af', fontSize:12, marginBottom:5}}>SAFETY HIT (Count)</div>
+             <div style={{fontSize: 24, fontWeight:'bold', color: '#3b82f6'}}>
+                <AimOutlined style={{marginRight: 8}} />
+                {stats.safeHitCount}
+             </div>
+             <div style={{fontSize: 12, color: '#6b7280'}}>
+                Hits Count
+             </div>
+        </div>
+      </HistoryPanel>
 
-              {/* 2. 픽 정보 (크게 보여주기) */}
-              <div style={{ textAlign: 'center', margin: '15px 0' }}>
-                {renderPick(room.pick, room.phase)}
-                {room.phase === 'BETTING' && (
-                  <div style={{ marginTop: 5, color: '#ff4d4f', fontWeight: 'bold' }}>
-                    {room.step}단계 진행중 🔥
-                  </div>
-                )}
-              </div>
+      {/* 2. 대기 */}
+      <div style={{marginBottom: 30}}>
+          <SectionTitle className="gold">
+            <ThunderboltOutlined className="icon" />
+            <h2>Waiting Zone</h2>
+          </SectionTitle>
+          {waitingRooms.length === 0 ? (
+            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={<span style={{color:'#6b7280'}}>패턴 탐색 중...</span>} />
+          ) : (
+            <Row gutter={[20, 20]} justify="center">
+                {waitingRooms.map((room) => (
+                <Col xs={24} sm={12} md={8} lg={6} xl={6} key={room.id}>
+                    <GameCard className="waiting">
+                        <div style={{color:'white', fontWeight:'bold', fontSize: 15}}>{room.room_name}</div>
+                        <div style={{textAlign:'center'}}>
+                            <div style={{fontSize:10, color:'#d4af37', marginBottom: 5}}>ENTRY READY</div>
+                            <PickDisplay className={room.pick}>{room.pick === 'P' ? 'PLAYER' : 'BANKER'}</PickDisplay>
+                        </div>
+                        <div style={{display:'flex', justifyContent:'space-between', marginTop:'auto'}}>
+                            <span style={{color:'#10b981', fontSize:12}}><ScanOutlined /> AI-{room.ai_num}</span>
+                            <Tag color="gold">대기중</Tag>
+                        </div>
+                    </GameCard>
+                </Col>
+                ))}
+            </Row>
+          )}
+      </div>
 
-              {/* 3. 그림판 (원매) */}
-              <Text type="secondary" style={{ fontSize: 11 }}>Recent History</Text>
-              <RoadMapGrid>
-                {/* 최근 12개 결과만 보여줌 (없으면 빈칸 채우기) */}
-                {Array.from({ length: 12 }).map((_, i) => {
-                  const history = room.history || [];
-                  const token = history[history.length - 12 + i]; // 뒤에서부터 12개
-                  return (
-                    <div key={i} style={{ display: 'flex', justifyContent: 'center' }}>
-                      {token ? <Bead className={token}>{token}</Bead> : <span style={{width:18, height:18, background:'#1f2d3d', borderRadius:'50%'}}></span>}
-                    </div>
-                  );
-                })}
-              </RoadMapGrid>
-            </RoomCard>
-          </Col>
-        ))}
-      </Row>
-    </DashboardContainer>
+      {/* 3. 진행 (Betting) */}
+      <div style={{marginBottom: 30}}>
+          <SectionTitle className="red">
+            <FireOutlined className="icon" />
+            <h2>Active Betting</h2>
+          </SectionTitle>
+          {bettingRooms.length === 0 ? (
+             <div style={{textAlign:'center', color:'#4b5563', padding: 20}}>현재 진행 중인 배팅이 없습니다.</div>
+          ) : (
+            <Row gutter={[20, 20]} justify="center">
+                {bettingRooms.map((room) => (
+                <Col xs={24} sm={12} md={8} lg={6} xl={6} key={room.id}>
+                    <GameCard className="betting">
+                        <div style={{color:'white', fontWeight:'bold', fontSize: 15}}>{room.room_name}</div>
+                        <div style={{textAlign:'center'}}>
+                            <div style={{fontSize:10, color:'#ef4444', marginBottom: 5}}>
+                                <SoundOutlined spin /> BETTING LIVE
+                            </div>
+                            <PickDisplay className={room.pick}>{room.pick === 'P' ? 'PLAYER' : 'BANKER'}</PickDisplay>
+                        </div>
+                        <div style={{display:'flex', justifyContent:'space-between', marginTop:'auto'}}>
+                            <span style={{color:'#10b981', fontSize:12}}><ScanOutlined /> AI-{room.ai_num}</span>
+                            <Tag color="#f50">{room.step}단계 진행 🔥</Tag>
+                        </div>
+                    </GameCard>
+                </Col>
+                ))}
+            </Row>
+          )}
+      </div>
+
+      {/* 4. 히스토리 */}
+      <div style={{marginBottom: 30, background: '#111827', padding: 20, borderRadius: 16, border: '1px solid #374151'}}>
+        <h3 style={{color:'white', marginBottom: 15}}><HistoryOutlined /> Recent Results</h3>
+        <DarkTable 
+            dataSource={stats.history} 
+            columns={columns} 
+            pagination={{ pageSize: 5, position: ['bottomCenter'] }} 
+            rowKey="id"
+            size="middle"
+        />
+      </div>
+
+      {/* 5. AI Scan */}
+      <ScanZone>
+        <div className="scan-bar"></div>
+        <ScanOutlined style={{ fontSize: 32, color: '#00e5ff', marginBottom: 15 }} spin />
+        <h3 style={{ color: '#fff', margin: 0 }}>AI Deep Learning Active</h3>
+        <p style={{ color: '#6b7280', marginTop: 10 }}>Analyzing {idleCount} Tables...</p>
+      </ScanZone>
+
+    </Container>
   );
 };
 
+// 🔥 중요: Dashboard로 내보내기 (App.jsx가 Dashboard를 찾고 있으니까!)
 export default Dashboard;
