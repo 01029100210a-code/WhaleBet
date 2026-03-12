@@ -12,6 +12,7 @@
   "dependencies": {
     "@ant-design/icons": "^5.6.1",
     "antd": "^5.29.3",
+    "axios": "^1.13.6",
     "bcryptjs": "^2.4.3",
     "canvas-confetti": "^1.9.2",
     "firebase": "^10.14.1",
