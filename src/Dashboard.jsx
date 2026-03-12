@@ -2,14 +2,15 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Row, Col, Spin, Empty, Tag, Statistic, Progress, Table } from 'antd';
 import { 
   TrophyOutlined, ThunderboltOutlined, ScanOutlined, FireOutlined, 
-  AimOutlined, HistoryOutlined, SoundOutlined, MutedOutlined, FieldTimeOutlined 
+  AimOutlined, HistoryOutlined, SoundOutlined, MutedOutlined, AlertOutlined 
 } from '@ant-design/icons';
 import styled, { keyframes } from 'styled-components';
 import { collection, onSnapshot, query, orderBy, limit } from "firebase/firestore";
 import { db } from '../firebase';
 
-// --- 🎵 사운드 파일 ---
-const TENSION_SOUND_URL = "https://assets.mixkit.co/active_storage/sfx/209/209-preview.mp3"; 
+// --- 🎵 사운드 파일 변경 (삐빅... 삐빅...) ---
+// 레이더 알람 소리 (반복 재생 시 삐빅.. 삐빅.. 효과)
+const BEEP_SOUND_URL = "https://assets.mixkit.co/active_storage/sfx/995/995-preview.mp3"; 
 const FANFARE_SOUND_URL = "https://assets.mixkit.co/active_storage/sfx/2019/2019-preview.mp3";
 
 // --- ✨ 애니메이션 ---
@@ -25,16 +26,16 @@ const pulseRed = keyframes`
   100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); border-color: #374151; }
 `;
 
+const blinkRed = keyframes`
+  0% { background-color: rgba(239, 68, 68, 0.1); color: #ef4444; }
+  50% { background-color: rgba(239, 68, 68, 0.5); color: #fff; }
+  100% { background-color: rgba(239, 68, 68, 0.1); color: #ef4444; }
+`;
+
 const scanMove = keyframes`
   0% { background-position: 0% 50%; }
   50% { background-position: 100% 50%; }
   100% { background-position: 0% 50%; }
-`;
-
-const blink = keyframes`
-  0% { opacity: 1; }
-  50% { opacity: 0.3; }
-  100% { opacity: 1; }
 `;
 
 // --- 🎨 스타일 ---
@@ -125,7 +126,7 @@ const GameCard = styled.div`
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  height: 220px; /* 카드 높이 약간 증가 */
+  height: 240px; 
   border: 1px solid #4b5563;
   position: relative;
   overflow: visible;
@@ -158,17 +159,24 @@ const PickDisplay = styled.div`
   &.B { color: #ef4444; text-shadow: 0 0 20px rgba(239, 68, 68, 0.5); }
 `;
 
-// 🕒 카운트다운 스타일
+// 🕒 카운트다운 스타일 (크고 붉게 변경)
 const CountdownBox = styled.div`
   text-align: center;
-  font-size: 16px;
-  font-weight: bold;
-  color: #fbbf24;
-  background: rgba(0,0,0,0.3);
-  padding: 5px;
+  font-size: 20px;
+  font-weight: 900;
+  border: 2px solid #ef4444;
   border-radius: 8px;
-  margin-bottom: 10px;
-  animation: ${blink} 1s infinite alternate;
+  padding: 8px;
+  margin-bottom: 15px;
+  animation: ${blinkRed} 0.5s infinite alternate; /* 깜빡임 속도 빠르게 */
+  
+  span {
+    display: block;
+    font-size: 12px;
+    font-weight: normal;
+    color: #cbd5e1;
+    margin-bottom: 2px;
+  }
 `;
 
 const ScanZone = styled.div`
@@ -199,35 +207,36 @@ const DarkTable = styled(Table)`
   .ant-pagination-item-active { border-color: #d4af37 !important; a { color: #d4af37 !important; } }
 `;
 
-// 🟡 대기 카드 전용 컴포넌트 (카운트다운 애니메이션 포함)
+// 🟡 대기 카드 (카운트다운 강화)
 const WaitingCard = ({ room }) => {
-    // 3 -> 2 -> 1 -> 반복 애니메이션
+    // 3, 2, 1 숫자만 표시
     const [count, setCount] = useState(3);
     
     useEffect(() => {
         const timer = setInterval(() => {
             setCount(prev => (prev > 1 ? prev - 1 : 3));
-        }, 1000); // 1초마다 감소
+        }, 800); // 0.8초마다 빠르게 감소
         return () => clearInterval(timer);
     }, []);
 
     return (
         <GameCard className="waiting">
-            <div style={{color:'white', fontWeight:'bold', fontSize: 15}}>{room.room_name}</div>
+            <div style={{color:'white', fontWeight:'bold', fontSize: 16}}>{room.room_name}</div>
             
-            {/* 3-2-1 카운트다운 UI */}
-            <div style={{textAlign:'center', marginTop: 10}}>
+            <div style={{textAlign:'center', marginTop: 15}}>
+                {/* 여기가 카운트다운 박스 */}
                 <CountdownBox>
-                   <FieldTimeOutlined style={{marginRight: 5}} /> 
-                   CHECKING... {count}
+                   <span>AI ANALYSIS</span>
+                   {count}...
                 </CountdownBox>
-                <div style={{fontSize:10, color:'#d4af37', marginBottom: 2}}>ENTRY READY</div>
+
+                <div style={{fontSize:11, color:'#d4af37', marginBottom: 2, letterSpacing: 1}}>ENTRY PREPARE</div>
                 <PickDisplay className={room.pick}>{room.pick === 'P' ? 'PLAYER' : 'BANKER'}</PickDisplay>
             </div>
 
             <div style={{display:'flex', justifyContent:'space-between', marginTop:'auto'}}>
                 <span style={{color:'#10b981', fontSize:12}}><ScanOutlined /> AI-{room.ai_num}</span>
-                <Tag color="gold">패턴 감지중</Tag>
+                <Tag color="gold">분석중</Tag>
             </div>
         </GameCard>
     );
@@ -251,23 +260,24 @@ const Dashboard = () => {
 
   const userEntryLevel = parseInt(localStorage.getItem('entryLevel')) || 1; 
 
-  const tensionAudioRef = useRef(new Audio(TENSION_SOUND_URL));
+  // 🔥 삐빅 사운드로 변경
+  const beepAudioRef = useRef(new Audio(BEEP_SOUND_URL));
   const fanfareAudioRef = useRef(new Audio(FANFARE_SOUND_URL));
   const isFirstLoad = useRef(true);
 
-  // 🔊 오디오 초기 설정 (루프 설정)
+  // 🔊 오디오 설정 (루프 = true 필수)
   useEffect(() => {
-    tensionAudioRef.current.loop = true; // 🔥 자동으로 반복되게 설정
-    tensionAudioRef.current.volume = 0.5;
-    fanfareAudioRef.current.volume = 0.7;
+    beepAudioRef.current.loop = true;  // 계속 반복
+    beepAudioRef.current.volume = 0.6; // 소리 크기 조절
+    fanfareAudioRef.current.volume = 0.8;
   }, []);
 
   const toggleSound = () => {
     if (!isSoundEnabled) {
-      // 강제 재생으로 권한 획득
-      tensionAudioRef.current.play().then(() => {
-        tensionAudioRef.current.pause();
-        tensionAudioRef.current.currentTime = 0;
+      // 권한 획득용 강제 재생
+      beepAudioRef.current.play().then(() => {
+        beepAudioRef.current.pause();
+        beepAudioRef.current.currentTime = 0;
       }).catch(() => {});
       fanfareAudioRef.current.play().then(() => {
         fanfareAudioRef.current.pause();
@@ -277,28 +287,29 @@ const Dashboard = () => {
       setIsSoundEnabled(true);
     } else {
       setIsSoundEnabled(false);
-      tensionAudioRef.current.pause();
-      tensionAudioRef.current.currentTime = 0;
+      beepAudioRef.current.pause();
+      beepAudioRef.current.currentTime = 0;
       fanfareAudioRef.current.pause();
     }
   };
 
-  // 🔊 [수정됨] 긴장감 사운드 로직 (Loop 방식)
+  // 🔊 [핵심] 배팅 중일 때 삐빅 소리 (Loop)
   useEffect(() => {
-    const audio = tensionAudioRef.current;
+    const audio = beepAudioRef.current;
 
     if (isSoundEnabled && bettingRooms.length > 0) {
-      // 이미 재생 중이 아니면 재생
+      // 배팅 방이 있으면 무조건 재생 (Loop라서 계속 울림)
       if (audio.paused) {
         audio.play().catch(e => console.log("Sound error:", e));
       }
     } else {
-      // 조건 안 맞으면 정지
+      // 배팅 방 없으면 멈춤
       audio.pause();
       audio.currentTime = 0;
     }
   }, [bettingRooms.length, isSoundEnabled]);
 
+  // 방 상태 감지
   useEffect(() => {
     const q = query(collection(db, "rooms"), orderBy("updated_at", "desc"));
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -406,7 +417,7 @@ const Dashboard = () => {
         </div>
       </HistoryPanel>
 
-      {/* 2. 대기 (Waiting) - 카운트다운 적용됨 */}
+      {/* 2. 대기 (Waiting) */}
       <div style={{marginBottom: 30}}>
           <SectionTitle className="gold">
             <ThunderboltOutlined className="icon" />
@@ -418,7 +429,6 @@ const Dashboard = () => {
             <Row gutter={[20, 20]} justify="center">
                 {waitingRooms.map((room) => (
                     <Col xs={24} sm={12} md={8} lg={6} xl={6} key={room.id}>
-                        {/* 🔥 WaitingCard 컴포넌트 사용 */}
                         <WaitingCard room={room} />
                     </Col>
                 ))}
