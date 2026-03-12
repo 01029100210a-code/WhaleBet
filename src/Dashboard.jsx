@@ -8,7 +8,7 @@ import styled, { keyframes } from 'styled-components';
 import { collection, onSnapshot, query, orderBy, limit } from "firebase/firestore";
 import { db } from '../firebase';
 
-// --- 🎵 사운드 파일 (삐빅 사운드 유지) ---
+// --- 🎵 사운드 파일 ---
 const BEEP_SOUND_URL = "https://assets.mixkit.co/active_storage/sfx/995/995-preview.mp3"; 
 const FANFARE_SOUND_URL = "https://assets.mixkit.co/active_storage/sfx/2019/2019-preview.mp3";
 
@@ -23,12 +23,6 @@ const pulseRed = keyframes`
   0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); border-color: #ef4444; }
   70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); border-color: #ef4444; }
   100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); border-color: #374151; }
-`;
-
-const blinkRed = keyframes`
-  0% { background-color: rgba(239, 68, 68, 0.1); color: #ef4444; }
-  50% { background-color: rgba(239, 68, 68, 0.5); color: #fff; }
-  100% { background-color: rgba(239, 68, 68, 0.1); color: #ef4444; }
 `;
 
 const scanMove = keyframes`
@@ -125,7 +119,7 @@ const GameCard = styled.div`
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  height: 240px; 
+  height: 250px; /* 높이 넉넉하게 */
   border: 1px solid #4b5563;
   position: relative;
   overflow: visible;
@@ -158,23 +152,25 @@ const PickDisplay = styled.div`
   &.B { color: #ef4444; text-shadow: 0 0 20px rgba(239, 68, 68, 0.5); }
 `;
 
-// 🕒 카운트다운 스타일
+// 🕒 카운트다운 스타일 (깜빡임 제거, 아주 잘 보이게 수정)
 const CountdownBox = styled.div`
   text-align: center;
-  font-size: 20px;
+  font-size: 28px; /* 글씨 아주 크게 */
   font-weight: 900;
-  border: 2px solid #ef4444;
+  color: #fbbf24; /* 밝은 노란색 */
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid #fbbf24;
   border-radius: 8px;
-  padding: 8px;
-  margin-bottom: 15px;
-  animation: ${blinkRed} 0.5s infinite alternate;
+  padding: 10px;
+  margin-bottom: 10px;
   
   span {
     display: block;
-    font-size: 12px;
+    font-size: 11px;
     font-weight: normal;
-    color: #cbd5e1;
-    margin-bottom: 2px;
+    color: #fff;
+    margin-bottom: 0;
+    letter-spacing: 2px;
   }
 `;
 
@@ -206,27 +202,34 @@ const DarkTable = styled(Table)`
   .ant-pagination-item-active { border-color: #d4af37 !important; a { color: #d4af37 !important; } }
 `;
 
-// 🟡 대기 카드 (카운트다운 포함)
+// 🟡 대기 카드 (카운트다운 수정됨)
 const WaitingCard = ({ room }) => {
     const [count, setCount] = useState(3);
+    
+    // 깜빡임 없이 숫자만 정확히 줄어듦
     useEffect(() => {
         const timer = setInterval(() => {
             setCount(prev => (prev > 1 ? prev - 1 : 3));
-        }, 800);
+        }, 1000); 
         return () => clearInterval(timer);
     }, []);
 
     return (
         <GameCard className="waiting">
             <div style={{color:'white', fontWeight:'bold', fontSize: 16}}>{room.room_name}</div>
-            <div style={{textAlign:'center', marginTop: 15}}>
+            
+            <div style={{marginTop: 15, padding: '0 10px'}}>
                 <CountdownBox>
-                   <span>AI ANALYSIS</span>
-                   {count}...
+                   <span>CHECKING</span>
+                   {count}
                 </CountdownBox>
-                <div style={{fontSize:11, color:'#d4af37', marginBottom: 2, letterSpacing: 1}}>ENTRY PREPARE</div>
-                <PickDisplay className={room.pick}>{room.pick === 'P' ? 'PLAYER' : 'BANKER'}</PickDisplay>
+                
+                <div style={{textAlign: 'center'}}>
+                    <div style={{fontSize:11, color:'#d4af37', marginBottom: 2, letterSpacing: 1}}>ENTRY PREPARE</div>
+                    <PickDisplay className={room.pick}>{room.pick === 'P' ? 'PLAYER' : 'BANKER'}</PickDisplay>
+                </div>
             </div>
+
             <div style={{display:'flex', justifyContent:'space-between', marginTop:'auto'}}>
                 <span style={{color:'#10b981', fontSize:12}}><ScanOutlined /> AI-{room.ai_num}</span>
                 <Tag color="gold">분석중</Tag>
@@ -242,6 +245,7 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [isSoundEnabled, setIsSoundEnabled] = useState(false);
 
+  // 통계
   const [stats, setStats] = useState({
     totalScore: 0,
     totalGames: 0,
@@ -257,10 +261,8 @@ const Dashboard = () => {
   const fanfareAudioRef = useRef(new Audio(FANFARE_SOUND_URL));
   const isFirstLoad = useRef(true);
 
-  // 🔊 오디오 설정
   useEffect(() => {
-    beepAudioRef.current.loop = true;  
-    beepAudioRef.current.volume = 0.6; 
+    beepAudioRef.current.volume = 0.6;
     fanfareAudioRef.current.volume = 0.8;
   }, []);
 
@@ -283,15 +285,26 @@ const Dashboard = () => {
     }
   };
 
-  // 🔊 삐빅 사운드
+  // 🔊 [핵심 수정] 배팅 중일 때 삐빅 소리 (Loop 방식 말고 1초마다 강제 재생)
   useEffect(() => {
-    const audio = beepAudioRef.current;
+    let intervalId = null;
+
     if (isSoundEnabled && bettingRooms.length > 0) {
-      if (audio.paused) audio.play().catch(e => console.log("Sound error:", e));
-    } else {
-      audio.pause();
-      audio.currentTime = 0;
+        // 즉시 재생
+        const playBeep = () => {
+             beepAudioRef.current.currentTime = 0;
+             beepAudioRef.current.play().catch(e => console.log("Sound error:", e));
+        };
+        playBeep();
+        
+        // 1초마다 반복 (loop 속성보다 이게 훨씬 안정적임)
+        intervalId = setInterval(playBeep, 1000); 
     }
+
+    return () => {
+        if(intervalId) clearInterval(intervalId);
+        beepAudioRef.current.pause();
+    };
   }, [bettingRooms.length, isSoundEnabled]);
 
   // 방 상태 구독
@@ -312,16 +325,10 @@ const Dashboard = () => {
     return () => unsubscribe();
   }, [userEntryLevel]);
 
-  // 💥 통계 집계 로직 (500개 데이터로 확장)
+  // 히스토리 & 빵빠레
   useEffect(() => {
-    const q = query(
-        collection(db, "game_history"), 
-        orderBy("created_at", "desc"),
-        limit(500) // 🔥 100 -> 500개로 대폭 증가 (통계 정확도 UP)
-    );
-
+    const q = query(collection(db, "game_history"), orderBy("created_at", "desc"), limit(500));
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      // 빵빠레 로직
       if (!isFirstLoad.current) {
         snapshot.docChanges().forEach((change) => {
           if (change.type === "added") {
@@ -337,48 +344,31 @@ const Dashboard = () => {
       }
 
       const historyData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      
       let winCount = 0;
       let totalStepScore = 0;
-      let safeHitCount = 0; // 1~4단계 승리 수
+      let safeHitCount = 0;
       let totalGames = historyData.length;
       
       historyData.forEach(item => {
           if (item.result === 'WIN') {
               winCount++;
               totalStepScore += item.step; 
-              if (item.step <= 4) {
-                  safeHitCount++; 
-              }
+              if (item.step <= 4) safeHitCount++; 
           }
       });
 
-      // 🔥 연승 로직 (Safety Streak)
-      // 중간에 패배(LOSS)가 있거나 5단계 이상이면 연승 끊기게 정확히 계산
       let streak = 0;
       for (let i = 0; i < historyData.length; i++) {
           const item = historyData[i];
-          if (item.result === 'WIN' && item.step <= 4) {
-              streak++;
-          } else {
-              // 패배거나, 4단계를 넘어가면 연승 끝
-              break; 
-          }
+          if (item.result === 'WIN' && item.step <= 4) streak++;
+          else break;
       }
 
-      // 승률 계산
       const winRate = totalGames > 0 ? Math.round((winCount / totalGames) * 100) : 0;
-
       setStats({
-        totalScore: totalStepScore, 
-        totalGames, 
-        winRate, 
-        safeHitCount, 
-        currentStreak: streak, 
-        history: historyData // 리스트에는 500개 다 보여주기엔 많으니 아래 Table에서 자를 예정
+        totalScore: totalStepScore, totalGames, winRate, safeHitCount, currentStreak: streak, history: historyData
       });
     });
-
     return () => unsubscribe();
   }, [isSoundEnabled]);
 
@@ -474,11 +464,9 @@ const Dashboard = () => {
       {/* 히스토리 */}
       <div style={{marginBottom: 30, background: '#111827', padding: 20, borderRadius: 16, border: '1px solid #374151'}}>
         <h3 style={{color:'white', marginBottom: 15}}><HistoryOutlined /> Recent Results (Latest 500)</h3>
-        {/* 🔥 테이블 페이지네이션으로 500개 다 볼 수 있게 */}
         <DarkTable dataSource={stats.history} columns={columns} pagination={{ pageSize: 5, position: ['bottomCenter'] }} rowKey="id" size="middle" />
       </div>
 
-      {/* AI Scan */}
       <ScanZone>
         <div className="scan-bar"></div>
         <ScanOutlined style={{ fontSize: 32, color: '#00e5ff', marginBottom: 15 }} spin />
