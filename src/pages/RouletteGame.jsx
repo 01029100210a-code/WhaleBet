@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { Button, message, Typography, Card, Modal } from 'antd';
-import { GiftOutlined } from '@ant-design/icons';
+import { GiftOutlined, ClockCircleOutlined } from '@ant-design/icons';
 import RoulettePro from 'react-roulette-pro';
 import 'react-roulette-pro/dist/index.css';
 import styled from 'styled-components';
-import { doc, getDoc, updateDoc, Timestamp, collection, addDoc } from 'firebase/firestore';
-import { db } from '../firebase'; 
+import { doc, getDoc, updateDoc, Timestamp, collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { db } from '../firebase'; // 경로가 맞는지 꼭 확인하세요! (예: '../firebase.js')
 
 const { Title, Text } = Typography;
 
@@ -67,6 +67,11 @@ const RouletteGame = ({ user }) => {
   const [loading, setLoading] = useState(false);
   const [canPlay, setCanPlay] = useState(true); 
   const [resetKey, setResetKey] = useState(0);
+  const [nextPlayTime, setNextPlayTime] = useState(null);
+
+  // 🔥 핵심: 6시간 쿨타임 설정
+  const COOLDOWN_HOURS = 6;
+  const COOLDOWN_MS = COOLDOWN_HOURS * 60 * 60 * 1000;
 
   useEffect(() => {
     checkLastPlay();
@@ -74,32 +79,48 @@ const RouletteGame = ({ user }) => {
 
   const checkLastPlay = async () => {
     if(!user) return;
-    const userRef = doc(db, "users", user.username);
-    const userSnap = await getDoc(userRef);
-    const userData = userSnap.data();
-
-    if (userData.lastGamePlayed) {
-      const diffSeconds = (new Date() - userData.lastGamePlayed.toDate()) / 1000;
-      if (diffSeconds < 5) { // 5초 쿨타임
-        setCanPlay(false);
-      } else {
-        setCanPlay(true);
-      }
+    try {
+        const userRef = doc(db, "users", user.username);
+        const userSnap = await getDoc(userRef);
+        
+        if (userSnap.exists()) {
+            const userData = userSnap.data();
+            
+            if (userData.lastGamePlayed) {
+                const lastPlayedDate = userData.lastGamePlayed.toDate(); // Firestore Timestamp 변환
+                const now = new Date();
+                const diffTime = now - lastPlayedDate;
+        
+                if (diffTime < COOLDOWN_MS) {
+                    // 쿨타임 걸림
+                    setCanPlay(false);
+                    setNextPlayTime(new Date(lastPlayedDate.getTime() + COOLDOWN_MS));
+                    console.log("쿨타임 중입니다.");
+                } else {
+                    setCanPlay(true);
+                    setNextPlayTime(null);
+                }
+            } else {
+                setCanPlay(true);
+            }
+        }
+    } catch(err) {
+        console.error("유저 정보 확인 실패:", err);
     }
   };
 
   const handleStart = async () => {
     if (!canPlay) {
-      message.warning('잠시 후 다시 시도해주세요!');
+      message.warning('아직 쿨타임이 지나지 않았습니다!');
       return;
     }
 
     setLoading(true);
     setStart(false);
 
+    // 랜덤 확률 로직
     const random = Math.random() * 100;
     let winType = 0; 
-
     if (random < 60) winType = 0;        
     else if (random < 85) winType = 4;   
     else if (random < 95) winType = 1;   
@@ -116,7 +137,6 @@ const RouletteGame = ({ user }) => {
             break;
         }
     }
-    
     if(targetIndex === -1) targetIndex = Math.floor(totalLength / 2);
 
     setPrizeIndex(targetIndex);
@@ -133,11 +153,21 @@ const RouletteGame = ({ user }) => {
     try {
         const userRef = doc(db, "users", user.username);
         
+        // 1. 마지막 게임 시간 업데이트 (이게 있어야 쿨타임이 작동함)
         await updateDoc(userRef, {
             lastGamePlayed: Timestamp.now()
         });
 
+        // 2. 히스토리 저장 (이게 있어야 마이페이지에 뜸)
+        await addDoc(collection(db, "roulette_history"), {
+            username: user.username,
+            result: prize.text,
+            isWin: prize.hours > 0,
+            timestamp: serverTimestamp()
+        });
+
         if (prize.hours > 0) {
+            // 당첨 로직
             const userSnap = await getDoc(userRef);
             const userData = userSnap.data();
             
@@ -160,21 +190,21 @@ const RouletteGame = ({ user }) => {
                 created_at: Timestamp.now()
             });
 
-            Modal.success({ title: '🎉 Congratulation!', content: `[${prize.text}] 당첨! 이용권이 연장되었습니다.` });
+            Modal.success({ title: '🎉 축하합니다!', content: `[${prize.text}] 당첨! 이용권이 연장되었습니다.` });
         } else {
-            Modal.error({ title: 'Oops...', content: '아쉽게도 꽝입니다. 다음 기회에!' });
+            Modal.error({ title: '아쉬워요..', content: '꽝입니다. 6시간 뒤에 다시 도전하세요!' });
         }
 
         setTimeout(() => {
             setStart(false);
             setLoading(false);
             setResetKey(prev => prev + 1); 
-            checkLastPlay();
+            checkLastPlay(); // 다시 체크해서 버튼 비활성화
         }, 3000); 
 
     } catch (e) {
-        console.error(e);
-        message.error("오류 발생");
+        console.error("저장 중 에러 발생:", e);
+        message.error("데이터 저장 중 오류가 발생했습니다. 관리자에게 문의하세요.");
     }
   };
 
@@ -203,27 +233,34 @@ const RouletteGame = ({ user }) => {
           />
         </div>
 
-        <Button 
-            type="primary" 
-            size="large" 
-            onClick={handleStart} 
-            disabled={!canPlay || start}
-            loading={loading && !start}
-            style={{ 
-                height: 70, 
-                width: 300, 
-                fontSize: 24, 
-                fontWeight: 'bold', 
-                background: canPlay ? 'linear-gradient(135deg, #d4af37 0%, #f59e0b 100%)' : '#374151',
-                borderColor: canPlay ? '#d4af37' : '#374151',
-                color: canPlay ? 'black' : '#9ca3af',
-                marginTop: 30,
-                boxShadow: canPlay ? '0 0 20px rgba(212, 175, 55, 0.5)' : 'none',
-                border: 'none'
-            }}
-        >
-            {canPlay ? "SPIN NOW!" : "Cooling Down..."}
-        </Button>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: 30 }}>
+            <Button 
+                type="primary" 
+                size="large" 
+                onClick={handleStart} 
+                disabled={!canPlay || start}
+                loading={loading && !start}
+                style={{ 
+                    height: 70, 
+                    width: 300, 
+                    fontSize: 24, 
+                    fontWeight: 'bold', 
+                    background: canPlay ? 'linear-gradient(135deg, #d4af37 0%, #f59e0b 100%)' : '#374151',
+                    borderColor: canPlay ? '#d4af37' : '#374151',
+                    color: canPlay ? 'black' : '#9ca3af',
+                    boxShadow: canPlay ? '0 0 20px rgba(212, 175, 55, 0.5)' : 'none',
+                    border: 'none'
+                }}
+            >
+                {canPlay ? "SPIN NOW!" : "Cooling Down..."}
+            </Button>
+            
+            {!canPlay && nextPlayTime && (
+                <Text style={{ color: '#ef4444', marginTop: 15, fontSize: 16 }}>
+                    <ClockCircleOutlined /> 다음 참여 가능 시간: {nextPlayTime.toLocaleTimeString()}
+                </Text>
+            )}
+        </div>
       </GameCard>
     </GameContainer>
   );
