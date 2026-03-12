@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Row, Col, Spin, Empty, Tag, Statistic, Progress, Table } from 'antd';
+import { Row, Col, Spin, Empty, Tag, Statistic, Progress, Table, Typography } from 'antd';
 import { 
   TrophyOutlined, ThunderboltOutlined, ScanOutlined, FireOutlined, 
-  AimOutlined, HistoryOutlined, SoundOutlined, MutedOutlined 
+  AimOutlined, HistoryOutlined, SoundOutlined, MutedOutlined, CheckCircleOutlined 
 } from '@ant-design/icons';
 import styled, { keyframes } from 'styled-components';
 import { collection, onSnapshot, query, orderBy, limit } from "firebase/firestore";
 import { db } from '../firebase';
+
+const { Text } = Typography;
 
 // --- 🎵 사운드 파일 ---
 const TENSION_SOUND_URL = "https://assets.mixkit.co/active_storage/sfx/209/209-preview.mp3"; 
@@ -39,12 +41,11 @@ const Container = styled.div`
   margin: 0 auto;
 `;
 
-// 🔹 상단 헤더 (타이틀 + 소리 버튼)
 const HeaderContainer = styled.div`
   display: flex;
   align-items: center;
   margin-bottom: 25px;
-  gap: 15px; /* 타이틀과 버튼 사이 간격 */
+  gap: 15px;
 `;
 
 const DashboardTitle = styled.h1`
@@ -75,8 +76,6 @@ const SoundToggleBtn = styled.button`
   &:hover {
     background: ${props => props.active ? 'rgba(16, 185, 129, 0.4)' : 'rgba(239, 68, 68, 0.4)'};
   }
-
-  /* 소리가 꺼져있을 때 깜빡임 효과 (눌러달라고 유도) */
   animation: ${props => !props.active ? pulseRed : 'none'} 2s infinite;
 `;
 
@@ -100,7 +99,6 @@ const HistoryPanel = styled.div`
 const SectionTitle = styled.div`
   display: flex;
   align-items: center;
-  justify-content: center;
   margin-bottom: 20px;
   
   h2 {
@@ -118,22 +116,25 @@ const SectionTitle = styled.div`
 const GameCard = styled.div`
   background-color: #1f2937;
   border-radius: 16px;
-  padding: 24px 20px;
+  padding: 20px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  height: 200px;
+  min-height: 220px; /* 높이 약간 조정 */
   border: 1px solid #4b5563;
   position: relative;
-  overflow: visible;
   transition: transform 0.3s ease;
 
   &:hover { transform: translateY(-5px); }
 
   &.waiting {
     border-color: #d4af37;
-    animation: ${pulseGold} 2s infinite;
     background: linear-gradient(145deg, #1f2937 0%, #292524 100%);
+  }
+  
+  /* 진입 임박 시 깜빡임 */
+  &.imminent {
+    animation: ${pulseGold} 1.5s infinite;
   }
 
   &.betting {
@@ -143,12 +144,31 @@ const GameCard = styled.div`
   }
 `;
 
+// [NEW] 카운트다운 박스 스타일
+const CountBox = styled.div`
+  border: 1px solid #d4af37;
+  background: rgba(212, 175, 55, 0.05);
+  border-radius: 12px;
+  padding: 10px;
+  text-align: center;
+  margin: 10px 0;
+`;
+
+const CountNumber = styled.div`
+  font-size: 42px;
+  font-weight: 800;
+  color: #fbbf24;
+  line-height: 1;
+  text-shadow: 0 0 15px rgba(251, 191, 36, 0.3);
+  margin-top: 5px;
+`;
+
 const PickDisplay = styled.div`
   font-size: 34px;
   font-weight: 900;
   letter-spacing: -1px;
   text-align: center;
-  margin: 15px 0;
+  margin: 10px 0;
   line-height: 1.2;
   
   &.P { color: #3b82f6; text-shadow: 0 0 20px rgba(59, 130, 246, 0.5); }
@@ -175,31 +195,12 @@ const ScanZone = styled.div`
 `;
 
 const DarkTable = styled(Table)`
-  .ant-table {
-    background: transparent;
-    color: #d1d5db;
-  }
-  .ant-table-thead > tr > th {
-    background: #1f2937 !important;
-    color: #9ca3af !important;
-    border-bottom: 1px solid #374151 !important;
-  }
-  .ant-table-tbody > tr > td {
-    border-bottom: 1px solid #1f2937 !important;
-    color: #e5e7eb !important;
-  }
-  .ant-table-tbody > tr:hover > td {
-    background: #111827 !important;
-  }
-  .ant-pagination-item-link, .ant-pagination-item {
-    background: transparent !important;
-    border-color: #374151 !important;
-    a { color: #9ca3af !important; }
-  }
-  .ant-pagination-item-active {
-    border-color: #d4af37 !important;
-    a { color: #d4af37 !important; }
-  }
+  .ant-table { background: transparent; color: #d1d5db; }
+  .ant-table-thead > tr > th { background: #1f2937 !important; color: #9ca3af !important; border-bottom: 1px solid #374151 !important; }
+  .ant-table-tbody > tr > td { border-bottom: 1px solid #1f2937 !important; color: #e5e7eb !important; }
+  .ant-table-tbody > tr:hover > td { background: #111827 !important; }
+  .ant-pagination-item-link, .ant-pagination-item { background: transparent !important; border-color: #374151 !important; a { color: #9ca3af !important; } }
+  .ant-pagination-item-active { border-color: #d4af37 !important; a { color: #d4af37 !important; } }
 `;
 
 const LivePicks = () => {
@@ -207,22 +208,15 @@ const LivePicks = () => {
   const [bettingRooms, setBettingRooms] = useState([]);
   const [idleCount, setIdleCount] = useState(0);
   const [loading, setLoading] = useState(true);
-  
-  // 🔊 소리 활성화 상태 (기본값: false - 브라우저 정책 때문)
   const [isSoundEnabled, setIsSoundEnabled] = useState(false);
 
   const [stats, setStats] = useState({
-    totalScore: 0,
-    totalGames: 0,
-    winRate: 0,
-    safeHitCount: 0,
-    currentStreak: 0,
-    history: []
+    totalScore: 0, totalGames: 0, winRate: 0, safeHitCount: 0, currentStreak: 0, history: []
   });
 
   const userEntryLevel = parseInt(localStorage.getItem('entryLevel')) || 1; 
 
-  // 🎵 오디오 Refs
+  // Refs
   const tensionAudioRef = useRef(new Audio(TENSION_SOUND_URL));
   const fanfareAudioRef = useRef(new Audio(FANFARE_SOUND_URL));
   const isFirstLoad = useRef(true);
@@ -232,20 +226,15 @@ const LivePicks = () => {
     fanfareAudioRef.current.volume = 0.7;
   }, []);
 
-  // 🔊 [기능] 소리 토글 버튼 클릭 핸들러
   const toggleSound = () => {
     if (!isSoundEnabled) {
-      // 소리를 켤 때, 강제로 짧게 재생했다 멈춰서 브라우저 권한을 획득함 (매우 중요)
+      // 권한 획득용 짧은 재생
       tensionAudioRef.current.play().then(() => {
-        tensionAudioRef.current.pause();
-        tensionAudioRef.current.currentTime = 0;
+        tensionAudioRef.current.pause(); tensionAudioRef.current.currentTime = 0;
       }).catch(() => {});
-      
       fanfareAudioRef.current.play().then(() => {
-        fanfareAudioRef.current.pause();
-        fanfareAudioRef.current.currentTime = 0;
+        fanfareAudioRef.current.pause(); fanfareAudioRef.current.currentTime = 0;
       }).catch(() => {});
-      
       setIsSoundEnabled(true);
     } else {
       setIsSoundEnabled(false);
@@ -254,11 +243,9 @@ const LivePicks = () => {
     }
   };
 
-  // 🔊 [사운드 1] 긴장감 사운드 (배팅 중일 때 3초 간격)
+  // Sound Logic (Active Betting)
   useEffect(() => {
     let intervalId = null;
-
-    // 소리가 켜져있고(isSoundEnabled) & 배팅 중인 방이 있을 때만
     if (isSoundEnabled && bettingRooms.length > 0) {
       const playTension = () => {
         if (tensionAudioRef.current.paused) {
@@ -266,7 +253,6 @@ const LivePicks = () => {
           tensionAudioRef.current.play().catch(e => console.log("Sound Blocked:", e));
         }
       };
-
       playTension();
       intervalId = setInterval(playTension, 3000);
     } else {
@@ -274,14 +260,13 @@ const LivePicks = () => {
       tensionAudioRef.current.pause();
       tensionAudioRef.current.currentTime = 0;
     }
-
     return () => {
       if(intervalId) clearInterval(intervalId);
       tensionAudioRef.current.pause();
     };
-  }, [bettingRooms.length, isSoundEnabled]); // 의존성에 isSoundEnabled 추가
+  }, [bettingRooms.length, isSoundEnabled]);
 
-  // 1. 방 상태 구독
+  // Firestore Snapshot (Rooms)
   useEffect(() => {
     const q = query(collection(db, "rooms"), orderBy("updated_at", "desc"));
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -300,24 +285,17 @@ const LivePicks = () => {
     return () => unsubscribe();
   }, [userEntryLevel]);
 
-  // 2. 🔥 히스토리 & 통계
+  // History & Stats
   useEffect(() => {
-    const q = query(
-        collection(db, "game_history"), 
-        orderBy("created_at", "desc"),
-        limit(100) 
-    );
-
+    const q = query(collection(db, "game_history"), orderBy("created_at", "desc"), limit(100));
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      // 🔊 [사운드 2] 빵빠레 (새로운 승리 감지)
       if (!isFirstLoad.current) {
         snapshot.docChanges().forEach((change) => {
           if (change.type === "added") {
             const data = change.doc.data();
-            // 소리가 켜져있을 때만 재생
             if (isSoundEnabled && data.result === 'WIN') {
                 fanfareAudioRef.current.currentTime = 0;
-                fanfareAudioRef.current.play().catch(e => console.log("Fanfare Blocked:", e));
+                fanfareAudioRef.current.play().catch(() => {});
             }
           }
         });
@@ -325,46 +303,30 @@ const LivePicks = () => {
         isFirstLoad.current = false;
       }
 
-      const historyData = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-      }));
-
-      // 통계 계산
-      let winCount = 0;
-      let totalStepScore = 0;
-      let safeHitCount = 0;
-      let totalGames = historyData.length;
+      const historyData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       
+      let winCount = 0, totalStepScore = 0, safeHitCount = 0;
       historyData.forEach(item => {
           if (item.result === 'WIN') {
-              winCount++;
-              totalStepScore += item.step; 
+              winCount++; totalStepScore += item.step; 
               if (item.step <= 4) safeHitCount++; 
           }
       });
 
       let streak = 0;
       for (let i = 0; i < historyData.length; i++) {
-          const item = historyData[i];
-          if (item.result === 'WIN' && item.step <= 4) streak++;
+          if (historyData[i].result === 'WIN' && historyData[i].step <= 4) streak++;
           else break;
       }
-
-      const winRate = totalGames > 0 ? Math.round((winCount / totalGames) * 100) : 0;
-
+      
       setStats({
-        totalScore: totalStepScore,
-        totalGames: totalGames,
-        winRate: winRate,
-        safeHitCount: safeHitCount,
-        currentStreak: streak,
-        history: historyData
+        totalScore: totalStepScore, totalGames: historyData.length,
+        winRate: historyData.length > 0 ? Math.round((winCount / historyData.length) * 100) : 0,
+        safeHitCount, currentStreak: streak, history: historyData
       });
     });
-
     return () => unsubscribe();
-  }, [isSoundEnabled]); // 소리 상태가 바뀌어도 동작하도록 의존성 추가
+  }, [isSoundEnabled]);
 
   const columns = [
     { title: 'Time', dataIndex: 'created_at', key: 'time', render: (ts) => <span style={{color:'#9ca3af'}}>{ts ? new Date(ts.seconds * 1000).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '-'}</span> },
@@ -379,7 +341,7 @@ const LivePicks = () => {
   return (
     <Container>
       
-      {/* 🔹 [헤더] 타이틀 + 소리 버튼 */}
+      {/* 🔹 헤더 & 사운드 */}
       <HeaderContainer>
         <DashboardTitle>WHALEBET DASHBOARD</DashboardTitle>
         <SoundToggleBtn onClick={toggleSound} active={isSoundEnabled}>
@@ -392,77 +354,91 @@ const LivePicks = () => {
       <HistoryPanel>
         <div style={{textAlign:'center'}}>
             <div style={{color:'#9ca3af', marginBottom: 5, fontSize:12}}>TOTAL WIN RATE</div>
-            <Progress 
-                type="circle" 
-                percent={stats.winRate} 
-                width={80} 
-                strokeColor="#10b981"  
-                trailColor="#374151"
-                format={percent => <span style={{color:'white', fontWeight:'bold'}}>{percent}%</span>} 
-            />
+            <Progress type="circle" percent={stats.winRate} width={80} strokeColor="#10b981" trailColor="#374151" format={percent => <span style={{color:'white', fontWeight:'bold'}}>{percent}%</span>} />
         </div>
-        
         <div style={{textAlign:'center', borderLeft:'1px solid #374151', paddingLeft: 30}}>
-            <Statistic 
-                title={<span style={{color:'#9ca3af', fontSize:12}}>TOTAL WINS (SCORE)</span>} 
-                value={stats.totalScore} 
-                valueStyle={{ color: '#d4af37', fontWeight:'bold', fontSize: 24 }} 
-                prefix={<TrophyOutlined />} 
-                suffix={<span style={{fontSize:12, color:'#6b7280', marginLeft: 5}}>pts</span>}
-            />
+            <Statistic title={<span style={{color:'#9ca3af', fontSize:12}}>TOTAL WINS</span>} value={stats.totalScore} valueStyle={{ color: '#d4af37', fontWeight:'bold', fontSize: 24 }} prefix={<TrophyOutlined />} suffix={<span style={{fontSize:12, color:'#6b7280', marginLeft: 5}}>pts</span>} />
         </div>
-
         <div style={{textAlign:'center', borderLeft:'1px solid #374151', paddingLeft: 30}}>
-            <Statistic 
-                title={<span style={{color:'#9ca3af', fontSize:12}}>SAFETY STREAK</span>} 
-                value={stats.currentStreak} 
-                valueStyle={{ color: '#ef4444', fontWeight:'bold', fontSize: 24 }} 
-                prefix={<FireOutlined />} 
-            />
+            <Statistic title={<span style={{color:'#9ca3af', fontSize:12}}>STREAK</span>} value={stats.currentStreak} valueStyle={{ color: '#ef4444', fontWeight:'bold', fontSize: 24 }} prefix={<FireOutlined />} />
         </div>
-
         <div style={{textAlign:'center', borderLeft:'1px solid #374151', paddingLeft: 30}}>
-             <div style={{color:'#9ca3af', fontSize:12, marginBottom:5}}>SAFETY HIT (Count)</div>
-             <div style={{fontSize: 24, fontWeight:'bold', color: '#3b82f6'}}>
-                <AimOutlined style={{marginRight: 8}} />
-                {stats.safeHitCount}
-             </div>
-             <div style={{fontSize: 12, color: '#6b7280'}}>
-                Hits Count
-             </div>
+             <div style={{color:'#9ca3af', fontSize:12, marginBottom:5}}>SAFETY HIT</div>
+             <div style={{fontSize: 24, fontWeight:'bold', color: '#3b82f6'}}><AimOutlined style={{marginRight: 8}} />{stats.safeHitCount}</div>
         </div>
       </HistoryPanel>
 
-      {/* 2. 대기 */}
+      {/* 2. 🔥 Waiting Zone (수정됨) */}
       <div style={{marginBottom: 30}}>
           <SectionTitle className="gold">
             <ThunderboltOutlined className="icon" />
             <h2>Waiting Zone</h2>
           </SectionTitle>
+          
           {waitingRooms.length === 0 ? (
             <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={<span style={{color:'#6b7280'}}>패턴 탐색 중...</span>} />
           ) : (
             <Row gutter={[20, 20]} justify="center">
-                {waitingRooms.map((room) => (
-                <Col xs={24} sm={12} md={8} lg={6} xl={6} key={room.id}>
-                    <GameCard className="waiting">
-                        <div style={{color:'white', fontWeight:'bold', fontSize: 15}}>{room.room_name}</div>
-                        <div style={{textAlign:'center'}}>
-                            <div style={{fontSize:10, color:'#d4af37', marginBottom: 5}}>ENTRY READY</div>
-                            <PickDisplay className={room.pick}>{room.pick === 'P' ? 'PLAYER' : 'BANKER'}</PickDisplay>
-                        </div>
-                        <div style={{display:'flex', justifyContent:'space-between', marginTop:'auto'}}>
-                            <span style={{color:'#10b981', fontSize:12}}><ScanOutlined /> AI-{room.ai_num}</span>
-                            <Tag color="gold">대기중</Tag>
-                        </div>
-                    </GameCard>
-                </Col>
-                ))}
+                {waitingRooms.map((room) => {
+                    // ⚠️ 핵심 로직: 남은 횟수(remaining)가 없으면 기본값 10으로 처리하여 분석중 화면 보여줌
+                    // DB에 remaining 필드가 있다면 그 값을 사용합니다.
+                    const remaining = room.remaining !== undefined ? room.remaining : 10;
+                    const isCountdown = remaining <= 3; 
+
+                    return (
+                        <Col xs={24} sm={12} md={8} lg={6} xl={6} key={room.id}>
+                            <GameCard className={`waiting ${isCountdown ? 'imminent' : ''}`}>
+                                <div style={{color:'white', fontWeight:'bold', fontSize: 16, marginBottom: 10}}>
+                                    {room.room_name}
+                                </div>
+
+                                {/* [조건부 렌더링] 3판 이하일 때 vs 아닐 때 */}
+                                {isCountdown ? (
+                                    // 3, 2, 1 카운트다운 화면
+                                    <div style={{textAlign:'center'}}>
+                                        <CountBox>
+                                            <Text style={{color:'#9ca3af', fontSize:10, letterSpacing:2}}>CHECKING</Text>
+                                            <CountNumber>{remaining}</CountNumber>
+                                        </CountBox>
+                                        <div style={{marginTop: 10}}>
+                                            <Text style={{color:'#9ca3af', fontSize:10}}>ENTRY PREPARE</Text>
+                                            <PickDisplay className={room.pick}>
+                                                {room.pick === 'P' ? 'PLAYER' : 'BANKER'}
+                                            </PickDisplay>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    // 일반 분석중 화면 (Deep Learning Scan)
+                                    <div style={{textAlign:'center', padding: '20px 0'}}>
+                                        <ScanOutlined spin style={{ fontSize: 40, color: '#4b5563', marginBottom: 15 }} />
+                                        <Text style={{ display: 'block', color: '#6b7280', fontSize: 14, fontWeight: 'bold' }}>
+                                            패턴 정밀 분석중
+                                        </Text>
+                                        <Text style={{ display: 'block', color: '#4b5563', fontSize: 12, marginTop: 5 }}>
+                                            데이터 수집 단계
+                                        </Text>
+                                    </div>
+                                )}
+
+                                <div style={{display:'flex', justifyContent:'space-between', marginTop:'auto', paddingTop: 15, borderTop:'1px solid #374151'}}>
+                                    <span style={{color:'#10b981', fontSize:12}}>
+                                        <ScanOutlined /> AI-{room.ai_num}
+                                    </span>
+                                    {isCountdown ? (
+                                        <Tag color="gold" style={{fontWeight:'bold'}}>진입 임박</Tag>
+                                    ) : (
+                                        <Tag color="default">분석중</Tag>
+                                    )}
+                                </div>
+                            </GameCard>
+                        </Col>
+                    );
+                })}
             </Row>
           )}
       </div>
 
-      {/* 3. 진행 (Betting) */}
+      {/* 3. 진행 (Betting) - 유지 */}
       <div style={{marginBottom: 30}}>
           <SectionTitle className="red">
             <FireOutlined className="icon" />
