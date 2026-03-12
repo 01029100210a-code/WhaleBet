@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Button, message, Modal } from 'antd';
 import { LogoutOutlined } from '@ant-design/icons';
 import { doc, onSnapshot } from "firebase/firestore";
-// ▼ 경로 수정 (pages 폴더에서 나가야 하므로 ../)
+// src/pages 안에 있으므로 firebase는 ../ 로 나갑니다.
 import { db } from '../firebase'; 
 import { useNavigate } from 'react-router-dom';
 import styled from 'styled-components';
@@ -35,16 +35,16 @@ const Main = () => {
       return;
     }
 
-    // ★ 실시간 감시 (차단 및 이중 접속 체크)
+    // ★ 실시간 감시 시작
     const unsubscribe = onSnapshot(doc(db, "users", myUsername), (docSnapshot) => {
       if (docSnapshot.exists()) {
         const data = docSnapshot.data();
         setUserData(data);
 
-        // 1. 차단 감지
+        // 1. 관리자가 차단했는지 체크
         if (data.isBlocked) {
           Modal.error({
-            title: '접속 차단',
+            title: '접속 차단됨',
             content: '관리자에 의해 계정이 차단되었습니다.',
             onOk: handleLogout,
             keyboard: false, maskClosable: false
@@ -52,7 +52,7 @@ const Main = () => {
           return;
         }
 
-        // 2. 이중 접속 감지
+        // 2. 다른 기기에서 로그인했는지 체크 (세션 ID 불일치)
         if (data.currentSessionId !== mySessionId) {
           Modal.warning({
             title: '중복 로그인 감지',
@@ -62,6 +62,7 @@ const Main = () => {
           });
         }
       } else {
+        // 계정 삭제됨
         handleLogout();
       }
     });
@@ -72,7 +73,7 @@ const Main = () => {
   return (
     <Container>
       <h1>🎉 Welcome, {myUsername}!</h1>
-      <p>현재 정상적으로 접속 중입니다.</p>
+      <p>정상적으로 접속 중입니다.</p>
       
       {userData && (
         <div style={{ marginTop: 20, padding: 20, background: '#1f2937', borderRadius: 8 }}>
@@ -81,10 +82,7 @@ const Main = () => {
         </div>
       )}
 
-      <Button 
-        type="primary" danger icon={<LogoutOutlined />} 
-        onClick={handleLogout} style={{ marginTop: 40 }}
-      >
+      <Button type="primary" danger icon={<LogoutOutlined />} onClick={handleLogout} style={{ marginTop: 40 }}>
         로그아웃
       </Button>
     </Container>

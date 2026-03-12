@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Form, Input, Button, message, Card } from 'antd';
 import { UserOutlined, LockOutlined } from '@ant-design/icons';
 import { doc, getDoc, updateDoc } from "firebase/firestore";
-// ▼ 경로 수정 (pages 폴더에서 나가야 하므로 ../)
+// src/pages 안에 있으므로 firebase는 ../ 로 나갑니다.
 import { db } from '../firebase'; 
 import bcrypt from 'bcryptjs';
 import { useNavigate } from 'react-router-dom';
@@ -20,17 +20,9 @@ const StyledCard = styled(Card)`
   width: 400px;
   background-color: #1f2937;
   border: 1px solid #374151;
-  
-  .ant-card-head-title {
-    color: #d4af37;
-    text-align: center;
-    font-size: 24px;
-    font-weight: bold;
-  }
-  
+  .ant-card-head-title { color: #d4af37; text-align: center; font-size: 24px; font-weight: bold; }
   label { color: #9ca3af !important; }
   input { background-color: #374151; color: white; border: 1px solid #4b5563; }
-  input:hover, input:focus { border-color: #d4af37; box-shadow: 0 0 0 2px rgba(212, 175, 55, 0.2); }
 `;
 
 const Login = () => {
@@ -51,7 +43,7 @@ const Login = () => {
 
       const userData = userSnap.data();
 
-      // 1. 차단 체크
+      // 1. 차단된 유저인지 확인
       if (userData.isBlocked) {
         message.error("관리자에 의해 접속이 차단된 계정입니다.");
         setLoading(false);
@@ -66,13 +58,15 @@ const Login = () => {
         return;
       }
 
-      // 3. 세션 ID 생성 및 저장 (이중 접속 방지)
+      // 3. 세션 ID 생성 (이중 접속 방지용)
       const newSessionId = Date.now().toString() + Math.random().toString(36).substr(2, 9);
       
+      // DB에 저장
       await updateDoc(userRef, {
         currentSessionId: newSessionId
       });
 
+      // 내 로컬에 저장
       localStorage.setItem('username', userData.username);
       localStorage.setItem('role', userData.role);
       localStorage.setItem('sessionId', newSessionId);
@@ -97,10 +91,10 @@ const Login = () => {
     <Container>
       <StyledCard title="WHALEBET LOGIN" bordered={false}>
         <Form name="login" onFinish={onFinish} layout="vertical">
-          <Form.Item name="username" rules={[{ required: true, message: '아이디를 입력해주세요!' }]}>
+          <Form.Item name="username" rules={[{ required: true, message: '아이디 입력 필수' }]}>
             <Input prefix={<UserOutlined />} placeholder="Username" size="large" />
           </Form.Item>
-          <Form.Item name="password" rules={[{ required: true, message: '비밀번호를 입력해주세요!' }]}>
+          <Form.Item name="password" rules={[{ required: true, message: '비밀번호 입력 필수' }]}>
             <Input.Password prefix={<LockOutlined />} placeholder="Password" size="large" />
           </Form.Item>
           <Form.Item>
