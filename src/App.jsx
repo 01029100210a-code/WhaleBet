@@ -1,9 +1,13 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import Login from './Login';
-import Admin from './Admin';
-import Main from './Main';
-import 'antd/dist/reset.css'; // Ant Design 스타일 (버전에 따라 다를 수 있음)
+
+// ▼ 경로 수정 (pages 폴더 안의 파일들을 가져오도록 수정)
+import Login from './pages/Login';
+import Admin from './pages/Admin';
+import Main from './pages/Main';
+
+// Ant Design 스타일 (버전에 따라 필요할 수도 있음)
+import 'antd/dist/reset.css'; 
 
 function App() {
   return (

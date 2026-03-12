@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { Form, Input, Button, message, Card } from 'antd';
 import { UserOutlined, LockOutlined } from '@ant-design/icons';
 import { doc, getDoc, updateDoc } from "firebase/firestore";
-import { db } from './firebase'; // 경로 확인 필요
+// ▼ 경로 수정 (pages 폴더에서 나가야 하므로 ../)
+import { db } from '../firebase'; 
 import bcrypt from 'bcryptjs';
 import { useNavigate } from 'react-router-dom';
 import styled from 'styled-components';
@@ -50,9 +51,9 @@ const Login = () => {
 
       const userData = userSnap.data();
 
-      // 1. [차단 체크] 관리자가 차단했는지 확인
+      // 1. 차단 체크
       if (userData.isBlocked) {
-        message.error("관리자에 의해 접속이 차단된 계정입니다. 관리자에게 문의하세요.");
+        message.error("관리자에 의해 접속이 차단된 계정입니다.");
         setLoading(false);
         return;
       }
@@ -65,23 +66,19 @@ const Login = () => {
         return;
       }
 
-      // 3. [이중 접속 방지 핵심] 고유 세션 ID 생성
-      // 시간 + 랜덤문자열 조합
+      // 3. 세션 ID 생성 및 저장 (이중 접속 방지)
       const newSessionId = Date.now().toString() + Math.random().toString(36).substr(2, 9);
-
-      // 4. DB에 현재 세션 ID 업데이트 (이전 접속자는 튕기게 됨)
+      
       await updateDoc(userRef, {
         currentSessionId: newSessionId
       });
 
-      // 5. 로컬 스토리지 저장
       localStorage.setItem('username', userData.username);
       localStorage.setItem('role', userData.role);
-      localStorage.setItem('sessionId', newSessionId); // ★ 중요: 내 세션 ID 저장
+      localStorage.setItem('sessionId', newSessionId);
 
       message.success("로그인 성공!");
 
-      // 6. 페이지 이동
       if (userData.role === 'admin') {
         navigate('/admin');
       } else {
@@ -99,34 +96,15 @@ const Login = () => {
   return (
     <Container>
       <StyledCard title="WHALEBET LOGIN" bordered={false}>
-        <Form
-          name="login"
-          onFinish={onFinish}
-          layout="vertical"
-        >
-          <Form.Item
-            name="username"
-            rules={[{ required: true, message: '아이디를 입력해주세요!' }]}
-          >
+        <Form name="login" onFinish={onFinish} layout="vertical">
+          <Form.Item name="username" rules={[{ required: true, message: '아이디를 입력해주세요!' }]}>
             <Input prefix={<UserOutlined />} placeholder="Username" size="large" />
           </Form.Item>
-
-          <Form.Item
-            name="password"
-            rules={[{ required: true, message: '비밀번호를 입력해주세요!' }]}
-          >
+          <Form.Item name="password" rules={[{ required: true, message: '비밀번호를 입력해주세요!' }]}>
             <Input.Password prefix={<LockOutlined />} placeholder="Password" size="large" />
           </Form.Item>
-
           <Form.Item>
-            <Button 
-              type="primary" 
-              htmlType="submit" 
-              block 
-              size="large" 
-              loading={loading}
-              style={{ backgroundColor: '#d4af37', borderColor: '#d4af37', marginTop: '10px' }}
-            >
+            <Button type="primary" htmlType="submit" block size="large" loading={loading} style={{ backgroundColor: '#d4af37', borderColor: '#d4af37' }}>
               로그인
             </Button>
           </Form.Item>
