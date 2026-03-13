@@ -8,7 +8,7 @@ import {
   EditOutlined, RobotOutlined, StopOutlined, CheckCircleOutlined, 
   ThunderboltOutlined, WifiOutlined, BarcodeOutlined, LockOutlined, UnlockOutlined, PoweroffOutlined
 } from '@ant-design/icons';
-import { collection, onSnapshot, doc, updateDoc, deleteDoc, setDoc, addDoc, Timestamp } from "firebase/firestore";
+import { collection, onSnapshot, doc, updateDoc, deleteDoc, setDoc, addDoc, Timestamp, getDoc } from "firebase/firestore";
 import { db } from '../firebase';
 import styled from 'styled-components';
 import dayjs from 'dayjs';
@@ -16,7 +16,7 @@ import bcrypt from 'bcryptjs';
 
 const { Option } = Select;
 
-// --- 스타일 ---
+// --- 스타일 (기존 유지) ---
 const AdminLayout = styled(Layout)` background: #111827; min-height: 100vh; padding: 20px; color: white; `;
 const StyledTable = styled(Table)` .ant-table { background: transparent; color: #e5e7eb; } .ant-table-thead > tr > th { background: #1f2937 !important; color: #9ca3af !important; border-bottom: 1px solid #374151 !important; font-size: 12px; } .ant-table-tbody > tr > td { border-bottom: 1px solid #1f2937 !important; color: #e5e7eb !important; } .ant-table-tbody > tr:hover > td { background: #374151 !important; } .ant-pagination-item-link, .ant-pagination-item { background: transparent !important; border-color: #374151 !important; a { color: #9ca3af !important; } } .ant-pagination-item-active { border-color: #10b981 !important; a { color: #10b981 !important; } } `;
 const StatsCard = styled(Card)` background: #1f2937; border: 1px solid #374151; border-radius: 8px; .ant-statistic-title { color: #9ca3af; } .ant-statistic-content { color: white; font-weight: bold; } `;
@@ -25,6 +25,8 @@ const Admin = () => {
   const [users, setUsers] = useState([]);
   const [coupons, setCoupons] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [currentUserRole, setCurrentUserRole] = useState(''); // 현재 로그인한 관리자 등급
+
   const [isUserModalVisible, setIsUserModalVisible] = useState(false);
   const [isCouponModalVisible, setIsCouponModalVisible] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
@@ -32,10 +34,20 @@ const Admin = () => {
   const [couponForm] = Form.useForm();
   const [searchText, setSearchText] = useState('');
 
+  // --- 현재 접속자 등급 확인 ---
+  useEffect(() => {
+      const myUsername = localStorage.getItem('username');
+      if (myUsername) {
+          getDoc(doc(db, "users", myUsername)).then(snap => {
+              if (snap.exists()) setCurrentUserRole(snap.data().role);
+          });
+      }
+  }, []);
+
+  // --- 데이터 로드 ---
   useEffect(() => {
     const unsubUsers = onSnapshot(collection(db, "users"), (snapshot) => {
       const usersData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      // 정렬: 미승인 > 접속중 > 관리자 > 일반
       usersData.sort((a, b) => {
           if (a.isApproved === false && b.isApproved !== false) return -1;
           if (b.isApproved === false && a.isApproved !== false) return 1;
@@ -58,6 +70,7 @@ const Admin = () => {
     try {
       const values = await form.validateFields();
       const userData = { ...values, expiryDate: values.expiryDate ? values.expiryDate.toDate() : null };
+      
       if (editingUser) {
         if (values.password) {
             const salt = bcrypt.genSaltSync(10);
@@ -69,8 +82,7 @@ const Admin = () => {
         const salt = bcrypt.genSaltSync(10);
         const hashedPassword = bcrypt.hashSync(values.password, salt);
         await setDoc(doc(db, "users", values.username), {
-            ...userData, password: hashedPassword, createdAt: Timestamp.now(), isBlocked: false, telegramChatId: '', isTelegramActive: false, isTelegramBlocked: false, strategyLevel: 1, currentSessionId: null,
-            isApproved: true // 관리자가 직접 만들면 바로 승인
+            ...userData, password: hashedPassword, createdAt: Timestamp.now(), isBlocked: false, telegramChatId: '', isTelegramActive: false, isTelegramBlocked: false, strategyLevel: 1, currentSessionId: null, isApproved: true
         });
         message.success('생성됨');
       }
@@ -84,13 +96,7 @@ const Admin = () => {
     await updateDoc(doc(db, "users", user.id), { isBlocked: newStatus, currentSessionId: newStatus ? null : user.currentSessionId });
     message.success(newStatus ? '차단됨' : '해제됨');
   };
-  
-  // 🔥 [승인] 가입 승인
-  const approveUser = async (user) => {
-      await updateDoc(doc(db, "users", user.id), { isApproved: true });
-      message.success('승인 완료');
-  };
-
+  const approveUser = async (user) => { await updateDoc(doc(db, "users", user.id), { isApproved: true }); message.success('승인 완료'); };
   const extendTime = async (id, days) => {
     const user = users.find(u => u.id === id);
     let currentExpiry = user.expiryDate ? user.expiryDate.toDate() : new Date();
@@ -126,7 +132,10 @@ const Admin = () => {
                     <Tag icon={isOnline ? <WifiOutlined /> : <PoweroffOutlined />} color={isOnline ? "success" : "default"}>{isOnline ? "ON" : "OFF"}</Tag>
                 </div>
                 <div style={{fontSize: 11, color: '#d1d5db', marginBottom:2}}>{r.name || '-'} / {r.phone || '-'}</div>
-                <div style={{fontSize: 11, color: '#f59e0b'}}>코드: {r.referralCode || '없음'}</div>
+                {/* 🔥 코드가 있으면 노란색으로 강조 */}
+                <div style={{fontSize: 11, color: r.referralCode ? '#f59e0b' : '#4b5563', fontWeight: r.referralCode ? 'bold' : 'normal'}}>
+                    코드: {r.referralCode || '없음'}
+                </div>
             </div>
           );
       }
@@ -171,9 +180,7 @@ const Admin = () => {
     {
       title: '관리', render: (_, r) => (
         <div style={{display:'flex', gap: 5, flexWrap:'wrap'}}>
-            {r.isApproved === false && (
-                <Button type="primary" size="small" style={{background:'#10b981', borderColor:'#10b981', width:'100%', marginBottom: 5}} onClick={() => approveUser(r)}>가입 승인</Button>
-            )}
+            {r.isApproved === false && ( <Button type="primary" size="small" style={{background:'#10b981', borderColor:'#10b981', width:'100%', marginBottom: 5}} onClick={() => approveUser(r)}>가입 승인</Button> )}
             <Button size="small" icon={<EditOutlined />} onClick={() => { setEditingUser(r); form.setFieldsValue({ ...r, password: '', expiryDate: r.expiryDate ? dayjs(r.expiryDate.toDate()) : null }); setIsUserModalVisible(true); }} />
             <Button size="small" type="primary" onClick={() => extendTime(r.id, 30)}>+30일</Button>
             <Tooltip title={r.isBlocked ? "차단 해제" : "접속 차단"}>
@@ -208,14 +215,21 @@ const Admin = () => {
         </div>
         <StyledTable columns={userColumns} dataSource={users} rowKey="id" loading={loading} pagination={{ pageSize: 8 }} />
         
+        {/* 유저 모달 */}
         <Modal title={editingUser ? "정보 수정" : "신규 생성"} open={isUserModalVisible} onOk={handleUserOk} onCancel={() => setIsUserModalVisible(false)}>
             <Form form={form} layout="vertical">
                 <Form.Item name="username" label="아이디"><Input disabled={!!editingUser} /></Form.Item>
                 <Form.Item name="password" label="비밀번호"><Input.Password /></Form.Item>
-                <Form.Item name="role" label="등급" initialValue="user"><Select><Option value="user">회원</Option><Option value="admin">관리자</Option></Select></Form.Item>
+                <Form.Item name="role" label="등급" initialValue="user"><Select><Option value="user">회원</Option><Option value="store">매장</Option><Option value="distributor">총판</Option><Option value="admin">관리자</Option></Select></Form.Item>
                 <Form.Item name="expiryDate" label="만료일"><DatePicker showTime style={{width:'100%'}} /></Form.Item>
+                
+                {/* 🔥 [추가] 추천인 코드 (super_admin만 수정 가능) */}
+                <Form.Item name="referralCode" label="추천인 코드 (총판/매장용)" help="일반 유저가 가입할 때 입력하는 코드입니다.">
+                    <Input disabled={currentUserRole !== 'super_admin'} placeholder="ex) CODE123" />
+                </Form.Item>
             </Form>
         </Modal>
+
         <Modal title="쿠폰 관리" open={isCouponModalVisible} onCancel={() => setIsCouponModalVisible(false)} footer={null} width={700}>
             <div style={{display:'flex', gap:10, marginBottom: 20}}>
                 <Form form={couponForm} layout="inline" onFinish={handleCreateCoupon}>
