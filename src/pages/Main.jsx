@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { Layout, Menu, Button, Modal, Tag, Alert } from 'antd';
+import { Layout, Menu, Button, Modal, Tag } from 'antd';
 import { DesktopOutlined, GiftOutlined, LogoutOutlined, CrownOutlined, SettingOutlined, UserOutlined, LockOutlined } from '@ant-design/icons';
 import { doc, onSnapshot, updateDoc, Timestamp } from "firebase/firestore";
 import { db } from '../firebase'; 
 import { useNavigate } from 'react-router-dom';
 import styled from 'styled-components';
-import axios from 'axios'; // IP 확인용
+import axios from 'axios'; 
 
-import Dashboard from './Dashboard';
+// 🔥 [수정 1] Dashboard 대신 LivePicks를 불러옵니다!
+import LivePicks from './LivePicks'; 
 import RouletteGame from './RouletteGame';
 import MyPage from './MyPage';
 
@@ -32,7 +33,7 @@ const Main = () => {
   const mySessionId = localStorage.getItem('sessionId');
   const adminRoles = ['super_admin', 'admin', 'distributor', 'store'];
 
-  // IP 저장 및 로그아웃 처리
+  // 로그아웃
   const handleLogout = async () => {
       if (myUsername) {
           try {
@@ -46,7 +47,7 @@ const Main = () => {
       navigate('/');
   };
 
-  // IP 주소 가져오기 및 저장 (최초 1회)
+  // IP 저장
   useEffect(() => {
       const saveIp = async () => {
           try {
@@ -59,6 +60,7 @@ const Main = () => {
       saveIp();
   }, [myUsername]);
 
+  // 세션 체크
   useEffect(() => {
     if (!myUsername || !mySessionId) { handleLogout(); return; }
     const unsub = onSnapshot(doc(db, "users", myUsername), (docSnap) => {
@@ -72,16 +74,15 @@ const Main = () => {
     return () => unsub();
   }, [myUsername, mySessionId, navigate]);
 
-  // 이용권 유효 여부 확인
+  // 이용권 유효 여부
   const isSubscriptionValid = () => {
       if (!userData) return false;
-      if (userData.role === 'super_admin' || userData.role === 'admin') return true; // 관리자는 무제한
+      if (userData.role === 'super_admin' || userData.role === 'admin') return true; 
       if (!userData.expiryDate) return false;
       const expiry = userData.expiryDate.toDate ? userData.expiryDate.toDate() : new Date(userData.expiryDate);
       return expiry > new Date();
   };
 
-  // 남은 시간 계산
   const getRemainingTime = () => {
       if (!userData?.expiryDate) return "만료됨";
       const expiry = userData.expiryDate.toDate ? userData.expiryDate.toDate() : new Date(userData.expiryDate);
@@ -118,7 +119,6 @@ const Main = () => {
                 {userData?.role === 'user' && <Tag color="blue">회원</Tag>}
                 <span>{myUsername}님</span>
                 
-                {/* ★ 이용권 남은 시간 표시 */}
                 <Tag color={isSubscriptionValid() ? "cyan" : "red"} style={{fontSize:13, padding:'4px 10px'}}>
                     {isSubscriptionValid() ? `이용권: ${getRemainingTime()}` : "🛑 이용권 만료"}
                 </Tag>
@@ -127,9 +127,9 @@ const Main = () => {
         </Header>
         
         <Content>
-          {/* ★ [핵심] 이용권 없으면 블라인드 처리 (Dashboard만 가림) */}
+          {/* 🔥 [수정 2] Dashboard -> LivePicks 로 변경! */}
           {selectedKey === '1' && (
-              isSubscriptionValid() ? <Dashboard /> : (
+              isSubscriptionValid() ? <LivePicks /> : (
                   <div style={{textAlign:'center', marginTop:100, color:'white'}}>
                       <LockOutlined style={{fontSize: 60, color:'#ef4444', marginBottom:20}} />
                       <h2>이용권이 만료되었습니다.</h2>
