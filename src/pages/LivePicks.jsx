@@ -4,17 +4,17 @@ import {
   TrophyOutlined, ThunderboltOutlined, ScanOutlined, FireOutlined, 
   AimOutlined, HistoryOutlined, SoundOutlined, MutedOutlined 
 } from '@ant-design/icons';
-import styled, { keyframes, css } from 'styled-components';
+import styled, { keyframes } from 'styled-components';
 import { collection, onSnapshot, query, orderBy, limit } from "firebase/firestore";
 import { db } from '../firebase';
 
 const { Text } = Typography;
 
-// --- 🎵 사운드 파일 (삐삐삐 소리) ---
+// --- 🎵 사운드 파일 ---
 const TENSION_SOUND_URL = "https://assets.mixkit.co/active_storage/sfx/209/209-preview.mp3"; 
 const FANFARE_SOUND_URL = "https://assets.mixkit.co/active_storage/sfx/2019/2019-preview.mp3";
 
-// --- ✨ 고급스러운 애니메이션 ---
+// --- ✨ 애니메이션 ---
 const glowGold = keyframes`
   0% { box-shadow: 0 0 5px rgba(212, 175, 55, 0.2); border-color: rgba(212, 175, 55, 0.5); }
   50% { box-shadow: 0 0 20px rgba(212, 175, 55, 0.6); border-color: #ffd700; }
@@ -25,12 +25,6 @@ const glowRed = keyframes`
   0% { box-shadow: 0 0 5px rgba(239, 68, 68, 0.2); border-color: rgba(239, 68, 68, 0.5); }
   50% { box-shadow: 0 0 25px rgba(239, 68, 68, 0.8); border-color: #ff0000; }
   100% { box-shadow: 0 0 5px rgba(239, 68, 68, 0.2); border-color: rgba(239, 68, 68, 0.5); }
-`;
-
-const neonTextAnim = keyframes`
-  0% { text-shadow: 0 0 5px #00ff00, 0 0 10px #00ff00; color: #ccff00; }
-  50% { text-shadow: 0 0 20px #00ff00, 0 0 30px #00ff00; color: #ffffff; }
-  100% { text-shadow: 0 0 5px #00ff00, 0 0 10px #00ff00; color: #ccff00; }
 `;
 
 const scanMove = keyframes`
@@ -50,6 +44,7 @@ const Container = styled.div`
 const HeaderContainer = styled.div`
   display: flex;
   align-items: center;
+  justify-content: space-between; /* 양옆 배치를 위해 수정 */
   margin-bottom: 25px;
   gap: 15px;
 `;
@@ -64,23 +59,32 @@ const DashboardTitle = styled.h1`
   letter-spacing: 1px;
 `;
 
+// 🔥 [수정] 버튼 스타일: z-index 추가 및 pointer-events 확인
 const SoundToggleBtn = styled.button`
+  position: relative;
+  z-index: 100; /* 다른 요소보다 위에 오도록 설정 */
   background: ${props => props.active ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)'};
   border: 1px solid ${props => props.active ? '#10b981' : '#ef4444'};
   color: ${props => props.active ? '#10b981' : '#ef4444'};
-  padding: 5px 12px;
+  padding: 8px 16px;
   border-radius: 20px;
   cursor: pointer;
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 13px;
+  gap: 8px;
+  font-size: 14px;
   font-weight: bold;
-  transition: all 0.3s ease;
+  transition: all 0.2s ease;
   outline: none;
+  user-select: none;
 
   &:hover {
     background: ${props => props.active ? 'rgba(16, 185, 129, 0.4)' : 'rgba(239, 68, 68, 0.4)'};
+    transform: scale(1.05);
+  }
+  
+  &:active {
+    transform: scale(0.95);
   }
 `;
 
@@ -130,23 +134,17 @@ const GameCard = styled.div`
   position: relative;
   transition: transform 0.3s ease;
   overflow: hidden;
-
-  /* 배경 은은한 그라데이션 */
   background: radial-gradient(circle at top right, rgba(255,255,255,0.03), transparent);
 
   &:hover { transform: translateY(-5px); }
 
-  &.waiting {
-    border-color: #d4af37;
-  }
+  &.waiting { border-color: #d4af37; }
   
-  /* 진입 임박: 금색 깜빡임 */
   &.imminent {
     animation: ${glowGold} 2s infinite;
     border-width: 2px;
   }
 
-  /* 배팅 중: 빨간색 깜빡임 */
   &.betting {
     animation: ${glowRed} 1.5s infinite;
     border-width: 2px;
@@ -161,7 +159,6 @@ const PickDisplay = styled.div`
   text-align: center;
   line-height: 1;
   margin-top: 15px;
-  
   &.P { color: #3b82f6; text-shadow: 0 0 25px rgba(59, 130, 246, 0.6); }
   &.B { color: #ef4444; text-shadow: 0 0 25px rgba(239, 68, 68, 0.6); }
 `;
@@ -185,21 +182,42 @@ const ScanZone = styled.div`
   }
 `;
 
-// 🔥 [NEW] 형광 네온 텍스트 스타일
-const NeonText = styled.span`
-  font-weight: 900;
-  font-size: 16px;
-  letter-spacing: 1px;
-  display: block;
-  margin-bottom: 5px;
+// 🔥 [NEW] 형광 그라데이션 아이콘 래퍼
+const FluorescentIconWrapper = styled.div`
+  font-size: 40px;
+  margin-bottom: 20px;
   
-  /* 무지개/형광 그라데이션 */
-  background: linear-gradient(to right, #4ade80, #22d3ee);
+  .anticon {
+    /* 청록 ~ 형광 녹색 그라데이션 */
+    background: linear-gradient(135deg, #00ffff, #00ff00);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    filter: drop-shadow(0 0 8px rgba(0, 255, 255, 0.3));
+    animation: spin 3s linear infinite;
+  }
+  @keyframes spin { 100% { transform: rotate(360deg); } }
+`;
+
+// 🔥 [NEW] 패턴 분석 텍스트 (회색, 두껍게)
+const AnalyzingText = styled.div`
+  color: #9ca3af;
+  font-size: 16px;
+  font-weight: 900; /* 두껍게 */
+  letter-spacing: 0.5px;
+  margin-bottom: 5px;
+  text-transform: uppercase;
+`;
+
+// 🔥 [NEW] 무지개 그라데이션 텍스트
+const RainbowText = styled.div`
+  font-size: 13px;
+  font-weight: 800;
+  margin-top: 4px;
+  /* 무지개 그라데이션 */
+  background: linear-gradient(to right, #ef4444, #f59e0b, #eab308, #22c55e, #3b82f6, #a855f7);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
-  
-  /* 그림자 효과로 네온 느낌 */
-  filter: drop-shadow(0 0 5px rgba(74, 222, 128, 0.5));
+  letter-spacing: -0.5px;
 `;
 
 const DarkTable = styled(Table)`
@@ -233,58 +251,77 @@ const LivePicks = () => {
 
   const userEntryLevel = parseInt(localStorage.getItem('entryLevel')) || 1; 
 
-  const tensionAudioRef = useRef(new Audio(TENSION_SOUND_URL));
-  const fanfareAudioRef = useRef(new Audio(FANFARE_SOUND_URL));
+  // --- 🔊 오디오 Refs ---
+  const tensionAudioRef = useRef(null);
+  const fanfareAudioRef = useRef(null);
   const isFirstLoad = useRef(true);
 
   useEffect(() => {
+    tensionAudioRef.current = new Audio(TENSION_SOUND_URL);
     tensionAudioRef.current.volume = 0.5;
+
+    fanfareAudioRef.current = new Audio(FANFARE_SOUND_URL);
     fanfareAudioRef.current.volume = 0.7;
   }, []);
 
-  const toggleSound = () => {
+  const toggleSound = async () => {
     if (!isSoundEnabled) {
-      tensionAudioRef.current.play().then(() => {
-        tensionAudioRef.current.pause(); tensionAudioRef.current.currentTime = 0;
-      }).catch(() => {});
-      fanfareAudioRef.current.play().then(() => {
-        fanfareAudioRef.current.pause(); fanfareAudioRef.current.currentTime = 0;
-      }).catch(() => {});
-      setIsSoundEnabled(true);
+      try {
+        if (tensionAudioRef.current) {
+            await tensionAudioRef.current.play();
+            tensionAudioRef.current.pause();
+            tensionAudioRef.current.currentTime = 0;
+        }
+        if (fanfareAudioRef.current) {
+            await fanfareAudioRef.current.play();
+            fanfareAudioRef.current.pause();
+            fanfareAudioRef.current.currentTime = 0;
+        }
+        setIsSoundEnabled(true);
+      } catch (e) {
+        console.error("오디오 권한 획득 실패:", e);
+      }
     } else {
       setIsSoundEnabled(false);
-      tensionAudioRef.current.pause();
-      fanfareAudioRef.current.pause();
+      if (tensionAudioRef.current) {
+        tensionAudioRef.current.pause();
+        tensionAudioRef.current.currentTime = 0;
+      }
+      if (fanfareAudioRef.current) {
+        fanfareAudioRef.current.pause();
+        fanfareAudioRef.current.currentTime = 0;
+      }
     }
   };
 
+  const hasActiveBetting = bettingRooms.length > 0;
+
   useEffect(() => {
     let intervalId = null;
-    if (isSoundEnabled && bettingRooms.length > 0) {
-      const playTension = () => {
-        if (tensionAudioRef.current.paused) {
-          tensionAudioRef.current.currentTime = 0;
-          tensionAudioRef.current.play().catch(e => console.log("Sound Blocked:", e));
+    if (isSoundEnabled && hasActiveBetting && tensionAudioRef.current) {
+      const playTension = async () => {
+        try {
+            tensionAudioRef.current.currentTime = 0;
+            await tensionAudioRef.current.play();
+        } catch (e) {
+            console.log("Auto-play prevented", e);
         }
       };
       playTension();
-      intervalId = setInterval(playTension, 3000); // 3초마다 삐삐삐
+      intervalId = setInterval(playTension, 3000);
     } else {
-      if(intervalId) clearInterval(intervalId);
-      tensionAudioRef.current.pause();
-      tensionAudioRef.current.currentTime = 0;
+      if (tensionAudioRef.current) {
+        tensionAudioRef.current.pause();
+        tensionAudioRef.current.currentTime = 0;
+      }
     }
-    return () => {
-      if(intervalId) clearInterval(intervalId);
-      tensionAudioRef.current.pause();
-    };
-  }, [bettingRooms.length, isSoundEnabled]);
+    return () => { if (intervalId) clearInterval(intervalId); };
+  }, [isSoundEnabled, hasActiveBetting]); 
 
   useEffect(() => {
     const q = query(collection(db, "rooms")); 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const roomData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      
       const waiting = roomData.filter(r => r.phase === 'WAITING');
       const betting = roomData.filter(r => r.phase === 'BETTING' && r.step >= userEntryLevel);
       const idle = roomData.length - waiting.length - betting.length;
@@ -300,7 +337,6 @@ const LivePicks = () => {
     return () => unsubscribe();
   }, [userEntryLevel]);
 
-  // (히스토리 로직 생략 없이 그대로 유지)
   useEffect(() => {
     const q = query(collection(db, "game_history"), orderBy("created_at", "desc"), limit(100));
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -308,7 +344,7 @@ const LivePicks = () => {
         snapshot.docChanges().forEach((change) => {
           if (change.type === "added") {
             const data = change.doc.data();
-            if (isSoundEnabled && data.result === 'WIN') {
+            if (isSoundEnabled && data.result === 'WIN' && fanfareAudioRef.current) {
                 fanfareAudioRef.current.currentTime = 0;
                 fanfareAudioRef.current.play().catch(() => {});
             }
@@ -343,7 +379,23 @@ const LivePicks = () => {
     { title: 'Time', dataIndex: 'created_at', key: 'time', render: (ts) => <span style={{color:'#9ca3af'}}>{ts ? new Date(ts.seconds * 1000).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '-'}</span> },
     { title: 'Room', dataIndex: 'room_name', key: 'room', render: (text) => <span style={{color:'white', fontWeight:'bold'}}>{text}</span> },
     { title: 'Pick', dataIndex: 'pick', key: 'pick', align: 'center', render: (pick) => <span style={{fontWeight:'bold', color: pick === 'P' ? '#3b82f6' : '#ef4444'}}>{pick === 'P' ? 'PLAYER' : 'BANKER'}</span> },
-    { title: 'Result', dataIndex: 'result', key: 'result', align: 'center', render: (res) => <Tag color={res === 'WIN' ? 'success' : 'error'}>{res}</Tag> },
+    // 🔥 [수정] Result 컬러 형광 녹색 (#39ff14) 적용
+    { 
+        title: 'Result', 
+        dataIndex: 'result', 
+        key: 'result', 
+        align: 'center', 
+        render: (res) => (
+            <span style={{
+                color: res === 'WIN' ? '#39ff14' : '#ff4d4f', // 형광 녹색
+                fontWeight: '900',
+                textShadow: res === 'WIN' ? '0 0 10px rgba(57, 255, 20, 0.4)' : 'none',
+                fontSize: '14px'
+            }}>
+                {res}
+            </span>
+        ) 
+    },
     { title: 'Step', dataIndex: 'step', key: 'step', align: 'right', render: (step) => <span style={{color: step <= 4 ? '#d4af37' : '#ef4444'}}>{step}단계</span> }
   ];
 
@@ -359,7 +411,7 @@ const LivePicks = () => {
         </SoundToggleBtn>
       </HeaderContainer>
 
-      {/* 통계 패널 (기존 유지) */}
+      {/* 통계 패널 */}
       <HistoryPanel>
         <div style={{textAlign:'center'}}>
             <div style={{color:'#9ca3af', marginBottom: 5, fontSize:12}}>TOTAL WIN RATE</div>
@@ -402,11 +454,9 @@ const LivePicks = () => {
                                 <CenterContent>
                                     {isCountdown ? (
                                         <div style={{textAlign:'center'}}>
-                                            {/* 🔥 카운트다운 텍스트 강조 */}
                                             <Text style={{color:'#fbbf24', fontSize:18, fontWeight:'bold', letterSpacing:1, textShadow: '0 0 10px rgba(251, 191, 36, 0.5)'}}>
                                                 ⚠️ 진입 임박 ({remaining}판 전)
                                             </Text>
-                                            
                                             <div style={{marginTop: 15}}>
                                                 <Text style={{color:'#9ca3af', fontSize:10}}>ENTRY PREPARE</Text>
                                                 <PickDisplay className={room.pick}>
@@ -416,10 +466,16 @@ const LivePicks = () => {
                                         </div>
                                     ) : (
                                         <div style={{textAlign:'center'}}>
-                                            <ScanOutlined spin style={{ fontSize: 40, color: '#4b5563', marginBottom: 20 }} />
-                                            {/* 🔥 형광 네온 텍스트 적용 */}
-                                            <NeonText>패턴 정밀 분석중</NeonText>
-                                            <NeonText style={{fontSize:12, opacity:0.8}}>데이터 수집 단계</NeonText>
+                                            {/* 🔥 [수정] 아이콘 형광 그라데이션 적용 */}
+                                            <FluorescentIconWrapper>
+                                                <ScanOutlined />
+                                            </FluorescentIconWrapper>
+                                            
+                                            {/* 🔥 [수정] 텍스트 변경: 회색 + 두껍게 */}
+                                            <AnalyzingText>패턴 정밀 분석중</AnalyzingText>
+                                            
+                                            {/* 🔥 [수정] 데이터 수집 단계 삭제 -> 무지개 텍스트 추가 */}
+                                            <RainbowText>1단계부터 타이보험필수!!</RainbowText>
                                         </div>
                                     )}
                                 </CenterContent>
@@ -448,9 +504,6 @@ const LivePicks = () => {
             <FireOutlined className="icon" />
             <h2>Active Betting</h2>
           </SectionTitle>
-          
-          {/* 🔥 [테스트 코드] 배팅 방이 없어도 하나 강제로 보여줘서 디자인 확인 (배포 전 삭제하세요) */}
-          {/* bettingRooms.length === 0 ? ... 이 부분을 잠시 주석처리하고 아래처럼 더미 데이터를 넣어보셔도 됩니다. */}
           
           {bettingRooms.length === 0 ? (
              <div style={{textAlign:'center', color:'#4b5563', padding: 20}}>현재 진행 중인 배팅이 없습니다.</div>
