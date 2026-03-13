@@ -10,13 +10,11 @@ import { db } from '../firebase';
 
 const { Text } = Typography;
 
-// --- 🎵 사운드 파일 (소스 유지) ---
-// 텐션 사운드 (배팅 시작/진행 알림)
+// --- 🎵 사운드 파일 ---
 const TENSION_SOUND_URL = "https://assets.mixkit.co/active_storage/sfx/209/209-preview.mp3"; 
-// 팡파레 사운드 (승리 알림)
 const FANFARE_SOUND_URL = "https://assets.mixkit.co/active_storage/sfx/2019/2019-preview.mp3";
 
-// --- ✨ 애니메이션 ---
+// --- ✨ 애니메이션 정의 ---
 const glowGold = keyframes`
   0% { box-shadow: 0 0 5px rgba(212, 175, 55, 0.2); border-color: rgba(212, 175, 55, 0.5); }
   50% { box-shadow: 0 0 20px rgba(212, 175, 55, 0.6); border-color: #ffd700; }
@@ -45,7 +43,7 @@ const pulse = keyframes`
   100% { opacity: 1; }
 `;
 
-// --- 🎨 스타일 ---
+// --- 🎨 스타일 컴포넌트 ---
 const Container = styled.div`
   padding: 20px;
   color: white;
@@ -71,10 +69,9 @@ const DashboardTitle = styled.h1`
   letter-spacing: 1px;
 `;
 
-// 🔥 [수정] 버튼 스타일: 클릭 확실히 되도록 스타일 보강
 const SoundToggleBtn = styled.button`
   position: relative;
-  z-index: 1000; /* 매우 높은 z-index */
+  z-index: 1000;
   background: ${props => props.$active ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)'};
   border: 1px solid ${props => props.$active ? '#10b981' : '#ef4444'};
   color: ${props => props.$active ? '#10b981' : '#ef4444'};
@@ -227,6 +224,16 @@ const RainbowText = styled.div`
   letter-spacing: -0.5px;
 `;
 
+// 🔥 [오류 수정] 애니메이션이 적용된 스타일 컴포넌트를 별도로 생성
+const BettingAlertText = styled.div`
+  font-size: 12px;
+  color: #ef4444;
+  margin-bottom: 15px;
+  letter-spacing: 2px;
+  font-weight: bold;
+  animation: ${pulse} 1s infinite;
+`;
+
 const DarkTable = styled(Table)`
   .ant-table { background: transparent; color: #d1d5db; }
   .ant-table-thead > tr > th { background: #1f2937 !important; color: #9ca3af !important; border-bottom: 1px solid #374151 !important; }
@@ -258,7 +265,6 @@ const LivePicks = () => {
 
   const userEntryLevel = parseInt(localStorage.getItem('entryLevel')) || 1; 
 
-  // --- 🔊 오디오 Refs ---
   const tensionAudioRef = useRef(null);
   const fanfareAudioRef = useRef(null);
   const isFirstLoad = useRef(true);
@@ -272,13 +278,10 @@ const LivePicks = () => {
     fanfareAudioRef.current.volume = 0.7;
   }, []);
 
-  // 🔥 [핵심 수정] 사운드 토글 함수
+  // 사운드 토글 함수
   const toggleSound = () => {
     if (isSoundEnabled) {
-      // 1. 소리 끄기 (먼저 UI 반영)
       setIsSoundEnabled(false);
-      
-      // 오디오 즉시 정지
       if (tensionAudioRef.current) {
         tensionAudioRef.current.pause();
         tensionAudioRef.current.currentTime = 0;
@@ -288,10 +291,7 @@ const LivePicks = () => {
         fanfareAudioRef.current.currentTime = 0;
       }
     } else {
-      // 2. 소리 켜기 (먼저 UI 반영)
       setIsSoundEnabled(true);
-      
-      // 브라우저 AudioContext 잠금 해제 시도 (UI 렌더링 후 비동기 실행)
       const unlockAudio = async () => {
         try {
           if (tensionAudioRef.current) {
@@ -305,7 +305,7 @@ const LivePicks = () => {
               fanfareAudioRef.current.currentTime = 0;
           }
         } catch (e) {
-          console.warn("오디오 자동 재생 권한 획득 중 오류 (무시 가능):", e);
+          console.warn("Audio unlock failed:", e);
         }
       };
       unlockAudio();
@@ -314,40 +314,33 @@ const LivePicks = () => {
 
   const hasActiveBetting = bettingRooms.length > 0;
 
-  // 🔥 [수정] 배팅 시작/진행 알림음 (반복)
+  // 배팅 알림음 루프
   useEffect(() => {
     let intervalId = null;
 
     if (isSoundEnabled && hasActiveBetting) {
-      // 즉시 재생 시도
       const playSound = async () => {
         if (tensionAudioRef.current) {
           try {
-            // 재생 중이면 시간만 돌리고, 아니면 재생
             tensionAudioRef.current.currentTime = 0;
             await tensionAudioRef.current.play();
           } catch (e) {
-            console.error("배팅 사운드 재생 실패:", e);
+            console.error("Play sound error:", e);
           }
         }
       };
-
-      playSound(); // 최초 1회 실행
-      intervalId = setInterval(playSound, 3000); // 3초 간격 반복
+      playSound();
+      intervalId = setInterval(playSound, 3000);
     } else {
-      // 배팅이 없거나 소리가 꺼지면 정지
       if (tensionAudioRef.current) {
         tensionAudioRef.current.pause();
         tensionAudioRef.current.currentTime = 0;
       }
     }
-
-    return () => {
-      if (intervalId) clearInterval(intervalId);
-    };
+    return () => { if (intervalId) clearInterval(intervalId); };
   }, [isSoundEnabled, hasActiveBetting]); 
 
-  // --- 🔥 Firestore: 실시간 룸 데이터 ---
+  // Firestore Listeners
   useEffect(() => {
     const q = query(collection(db, "rooms")); 
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -367,26 +360,22 @@ const LivePicks = () => {
     return () => unsubscribe();
   }, [userEntryLevel]);
 
-  // --- 🔥 Firestore: 게임 히스토리 및 승리 사운드 ---
   useEffect(() => {
     const q = query(collection(db, "game_history"), orderBy("created_at", "desc"), limit(100));
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      // 첫 로드가 아닐 때만 사운드 재생
       if (!isFirstLoad.current) {
         snapshot.docChanges().forEach((change) => {
           if (change.type === "added") {
             const data = change.doc.data();
-            // 승리 시 팡파레
             if (isSoundEnabled && data.result === 'WIN' && fanfareAudioRef.current) {
                 fanfareAudioRef.current.currentTime = 0;
-                fanfareAudioRef.current.play().catch(e => console.log("Win sound failed:", e));
+                fanfareAudioRef.current.play().catch(() => {});
             }
           }
         });
       } else {
         isFirstLoad.current = false;
       }
-
       const historyData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       let winCount = 0, totalStepScore = 0, safeHitCount = 0;
       historyData.forEach(item => {
@@ -438,7 +427,6 @@ const LivePicks = () => {
     <Container>
       <HeaderContainer>
         <DashboardTitle>WHALEBET DASHBOARD</DashboardTitle>
-        {/* 🔥 [수정] active prop을 styled-components 표준인 $active로 변경 (경고 방지 및 동작 보장) */}
         <SoundToggleBtn onClick={toggleSound} $active={isSoundEnabled}>
           {isSoundEnabled ? <SoundOutlined /> : <MutedOutlined />}
           {isSoundEnabled ? 'SOUND ON' : 'SOUND OFF'}
@@ -503,9 +491,7 @@ const LivePicks = () => {
                                             <FluorescentIconWrapper>
                                                 <ScanOutlined />
                                             </FluorescentIconWrapper>
-                                            
                                             <AnalyzingText>패턴 정밀 분석중</AnalyzingText>
-                                            
                                             <RainbowText>1단계부터 타이보험필수!!</RainbowText>
                                         </div>
                                     )}
@@ -549,9 +535,11 @@ const LivePicks = () => {
 
                         <CenterContent>
                             <div style={{textAlign:'center'}}>
-                                <div style={{fontSize:12, color:'#ef4444', marginBottom: 15, letterSpacing:2, fontWeight:'bold', animation: `${pulse} 1s infinite`}}>
+                                {/* 🔥 [수정] 인라인 스타일 애니메이션 제거 후 스타일 컴포넌트로 대체 */}
+                                <BettingAlertText>
                                     <SoundOutlined /> BETTING LIVE
-                                </div>
+                                </BettingAlertText>
+                                
                                 <PickDisplay className={room.pick}>
                                     {room.pick === 'P' ? 'PLAYER' : 'BANKER'}
                                 </PickDisplay>
