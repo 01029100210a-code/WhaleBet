@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Form, Input, Button, message, Row, Col, Statistic, Card, Typography, Table, Tag } from 'antd';
+import { Form, Input, Button, message, Row, Col, Statistic, Card, Typography, Table, Tag, Modal } from 'antd';
 import { 
   UserOutlined, LockOutlined, TrophyOutlined, 
   FireOutlined, AimOutlined, ThunderboltOutlined, SendOutlined, GlobalOutlined, HistoryOutlined 
 } from '@ant-design/icons';
 import styled, { keyframes, createGlobalStyle } from 'styled-components';
-import { collection, query, orderBy, limit, onSnapshot, doc, getDoc, updateDoc } from "firebase/firestore";
+import { collection, query, orderBy, limit, onSnapshot, doc, getDoc, updateDoc, setDoc, Timestamp } from "firebase/firestore";
 import { db } from '../firebase';
 import { useNavigate } from 'react-router-dom';
 import bcrypt from 'bcryptjs';
@@ -230,6 +230,7 @@ const reservationData = Array.from({ length: 30 }, (_, i) => ({
 const Login = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
+  const [isJoinModalVisible, setIsJoinModalVisible] = useState(false); // 회원가입 모달 상태
   const [stats, setStats] = useState({ winRate: 0, totalScore: 0, streak: 0, safetyHit: 0 });
   const [recentHistory, setRecentHistory] = useState([]);
 
@@ -328,6 +329,41 @@ const Login = () => {
     setLoading(false);
   };
 
+  // --- 🔥 [추가] 회원가입 핸들러 ---
+  const onJoin = async (values) => {
+    try {
+        const userRef = doc(db, "users", values.username);
+        const userSnap = await getDoc(userRef);
+        if (userSnap.exists()) {
+            message.error("이미 존재하는 아이디입니다.");
+            return;
+        }
+
+        // 비밀번호 암호화 후 저장
+        const salt = bcrypt.genSaltSync(10);
+        const hashedPassword = bcrypt.hashSync(values.password, salt);
+
+        await setDoc(userRef, {
+            username: values.username,
+            password: hashedPassword,
+            role: 'user', // 기본 등급
+            createdAt: Timestamp.now(),
+            expiryDate: null, // 초기엔 이용권 없음
+            isBlocked: false,
+            telegramChatId: '',
+            isTelegramActive: false,
+            isTelegramBlocked: false,
+            strategyLevel: 1,
+            currentSessionId: null
+        });
+
+        message.success("회원가입 완료! 로그인해주세요.");
+        setIsJoinModalVisible(false);
+    } catch (e) {
+        message.error("가입 실패");
+    }
+  };
+
   const columns = [
     { title: 'Time', dataIndex: 'created_at', key: 'time', render: (ts) => <span style={{color:'#94a3b8'}}>{ts ? new Date(ts.seconds * 1000).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '-'}</span> },
     { title: 'Room', dataIndex: 'room_name', key: 'room', render: (text) => <span style={{color:'white', fontWeight:'bold'}}>{text}</span> },
@@ -384,7 +420,8 @@ const Login = () => {
                   </Form>
                   <div style={{textAlign:'center', borderTop:'1px solid rgba(255,255,255,0.1)', paddingTop: 20}}>
                     <Text style={{color:'#94a3b8', fontSize: 12}}>Don't have an account? </Text>
-                    <a href={ADMIN_TELEGRAM_URL} target="_blank" rel="noreferrer" style={{color:'#d4af37', fontWeight:'bold', marginLeft: 5}}>Contact Admin</a>
+                    {/* 🔥 [추가] 회원가입 버튼 */}
+                    <a onClick={() => setIsJoinModalVisible(true)} style={{color:'#d4af37', fontWeight:'bold', marginLeft: 5, cursor:'pointer'}}>Join Now</a>
                   </div>
                 </LoginCard>
               </Col>
@@ -406,6 +443,15 @@ const Login = () => {
 
           </div>
         </ContentWrapper>
+
+        {/* 🔥 [추가] 회원가입 모달 */}
+        <Modal title="회원가입" open={isJoinModalVisible} onCancel={() => setIsJoinModalVisible(false)} footer={null}>
+            <Form layout="vertical" onFinish={onJoin}>
+                <Form.Item name="username" label="아이디" rules={[{ required: true, message: '아이디를 입력해주세요.' }]}><Input /></Form.Item>
+                <Form.Item name="password" label="비밀번호" rules={[{ required: true, message: '비밀번호를 입력해주세요.' }]}><Input.Password /></Form.Item>
+                <Button type="primary" htmlType="submit" block style={{fontWeight:'bold'}}>가입하기</Button>
+            </Form>
+        </Modal>
 
         {/* 예약자 슬라이더 */}
         <ReservationWidget>
