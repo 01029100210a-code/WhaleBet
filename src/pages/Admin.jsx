@@ -1,20 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Table, Layout, Button, Input, Modal, Form, DatePicker, 
-  Select, Tag, message, Popconfirm, Card, Row, Col, Statistic, Switch, Tooltip, Badge
+  Select, Tag, message, Popconfirm, Card, Row, Col, Statistic, Switch, Tooltip, Tabs
 } from 'antd';
 import { 
   SearchOutlined, UserAddOutlined, DeleteOutlined, 
-  EditOutlined, RobotOutlined, StopOutlined, CheckCircleOutlined, ThunderboltOutlined 
+  EditOutlined, RobotOutlined, StopOutlined, CheckCircleOutlined, 
+  ThunderboltOutlined, WifiOutlined, BarcodeOutlined, LockOutlined, UnlockOutlined 
 } from '@ant-design/icons';
-import { collection, onSnapshot, doc, updateDoc, deleteDoc, setDoc, Timestamp } from "firebase/firestore";
+import { collection, onSnapshot, doc, updateDoc, deleteDoc, setDoc, addDoc, Timestamp } from "firebase/firestore";
 import { db } from '../firebase';
 import styled from 'styled-components';
 import dayjs from 'dayjs';
 
 const { Option } = Select;
 
-// --- 스타일 컴포넌트 ---
+// --- 스타일 ---
 const AdminLayout = styled(Layout)`
   background: #111827; 
   min-height: 100vh;
@@ -24,7 +25,7 @@ const AdminLayout = styled(Layout)`
 
 const StyledTable = styled(Table)`
   .ant-table { background: transparent; color: #e5e7eb; }
-  .ant-table-thead > tr > th { background: #1f2937 !important; color: #9ca3af !important; border-bottom: 1px solid #374151 !important; }
+  .ant-table-thead > tr > th { background: #1f2937 !important; color: #9ca3af !important; border-bottom: 1px solid #374151 !important; font-size: 12px; }
   .ant-table-tbody > tr > td { border-bottom: 1px solid #1f2937 !important; color: #e5e7eb !important; }
   .ant-table-tbody > tr:hover > td { background: #374151 !important; }
   .ant-pagination-item-link, .ant-pagination-item { background: transparent !important; border-color: #374151 !important; a { color: #9ca3af !important; } }
@@ -41,27 +42,42 @@ const StatsCard = styled(Card)`
 
 const Admin = () => {
   const [users, setUsers] = useState([]);
+  const [coupons, setCoupons] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [isModalVisible, setIsModalVisible] = useState(false);
+  
+  // 모달 상태
+  const [isUserModalVisible, setIsUserModalVisible] = useState(false);
+  const [isCouponModalVisible, setIsCouponModalVisible] = useState(false);
+  
   const [editingUser, setEditingUser] = useState(null);
   const [form] = Form.useForm();
+  const [couponForm] = Form.useForm();
   const [searchText, setSearchText] = useState('');
 
-  // --- 실시간 유저 데이터 가져오기 ---
+  // --- 데이터 실시간 로드 ---
   useEffect(() => {
-    const unsubscribe = onSnapshot(collection(db, "users"), (snapshot) => {
-      const usersData = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
+    // 1. 유저 데이터
+    const unsubUsers = onSnapshot(collection(db, "users"), (snapshot) => {
+      const usersData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      // 관리자 등급 우선 정렬
+      usersData.sort((a, b) => (b.role === 'super_admin') - (a.role === 'super_admin'));
       setUsers(usersData);
       setLoading(false);
     });
-    return () => unsubscribe();
+
+    // 2. 쿠폰 데이터
+    const unsubCoupons = onSnapshot(collection(db, "coupons"), (snapshot) => {
+      const couponData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      // 생성일 역순 정렬
+      couponData.sort((a, b) => b.createdAt?.seconds - a.createdAt?.seconds);
+      setCoupons(couponData);
+    });
+
+    return () => { unsubUsers(); unsubCoupons(); };
   }, []);
 
-  // --- 유저 생성/수정 ---
-  const handleOk = async () => {
+  // --- [유저 관리] 생성 및 수정 ---
+  const handleUserOk = async () => {
     try {
       const values = await form.validateFields();
       const userData = {
@@ -71,34 +87,43 @@ const Admin = () => {
 
       if (editingUser) {
         await updateDoc(doc(db, "users", editingUser.id), userData);
-        message.success('유저 정보 수정 완료');
+        message.success('유저 정보가 수정되었습니다.');
       } else {
         await setDoc(doc(db, "users", values.username), {
             ...userData,
+            password: values.password, // 초기 비밀번호 설정
             createdAt: Timestamp.now(),
             isBlocked: false,
             telegramChatId: '',
             isTelegramActive: false,
             isTelegramBlocked: false, 
-            strategyLevel: 1 // 기본 전략 1단계
+            strategyLevel: 1
         });
-        message.success('새 유저 생성 완료');
+        message.success('신규 유저가 생성되었습니다.');
       }
-      setIsModalVisible(false);
+      setIsUserModalVisible(false);
       form.resetFields();
       setEditingUser(null);
     } catch (error) {
-      message.error('오류 발생: ' + error.message);
+      message.error('입력값을 확인해주세요.');
     }
   };
 
-  // --- 유저 삭제 ---
-  const handleDelete = async (id) => {
+  // --- [유저 관리] 삭제 ---
+  const handleDeleteUser = async (id) => {
     await deleteDoc(doc(db, "users", id));
-    message.success('유저 삭제 완료');
+    message.success('유저가 삭제되었습니다.');
   };
 
-  // --- 이용권 연장 ---
+  // --- [유저 관리] 계정 차단/해제 (로그인 차단) ---
+  const toggleUserBlock = async (user) => {
+    const newStatus = !user.isBlocked;
+    await updateDoc(doc(db, "users", user.id), { isBlocked: newStatus });
+    if(newStatus) message.warning('해당 계정의 접속을 차단했습니다.');
+    else message.success('접속 차단을 해제했습니다.');
+  };
+
+  // --- [유저 관리] 이용권 연장 ---
   const extendTime = async (id, days) => {
     const user = users.find(u => u.id === id);
     let currentExpiry = user.expiryDate ? user.expiryDate.toDate() : new Date();
@@ -109,105 +134,111 @@ const Admin = () => {
     message.success(`${days}일 연장되었습니다.`);
   };
 
-  // --- 🔥 [기능] 텔레그램 알림 차단 토글 ---
+  // --- [텔레그램] 알림 차단 토글 ---
   const toggleTelegramBlock = async (user) => {
-    const currentStatus = user.isTelegramBlocked || false;
-    const newStatus = !currentStatus; // 반대로 전환
-
-    try {
-        await updateDoc(doc(db, "users", user.id), {
-            isTelegramBlocked: newStatus
-        });
-        
-        if (newStatus) message.error(`${user.id}님의 알림을 차단했습니다.`);
-        else message.success(`${user.id}님의 차단을 해제했습니다.`);
-    } catch (e) {
-        message.error('상태 변경 실패');
-    }
+    const newStatus = !user.isTelegramBlocked;
+    await updateDoc(doc(db, "users", user.id), { 
+        isTelegramBlocked: newStatus,
+        isTelegramActive: newStatus ? false : user.isTelegramActive 
+    });
+    if (newStatus) message.error('텔레그램 알림을 차단했습니다.');
+    else message.success('텔레그램 차단을 해제했습니다.');
   };
 
-  // --- 테이블 컬럼 정의 ---
-  const columns = [
+  // --- [쿠폰 관리] 생성 ---
+  const handleCreateCoupon = async () => {
+      try {
+          const values = await couponForm.validateFields();
+          // 랜덤 코드 생성 (ex: WB-X7Z9-A2)
+          const code = `WB-${Math.random().toString(36).substr(2, 4).toUpperCase()}-${Math.random().toString(36).substr(2, 4).toUpperCase()}`;
+          
+          await addDoc(collection(db, "coupons"), {
+              code: code,
+              days: values.days,
+              isUsed: false,
+              usedBy: null,
+              createdAt: Timestamp.now()
+          });
+          
+          message.success(`쿠폰 생성 완료: ${code}`);
+          couponForm.resetFields();
+      } catch (e) {
+          message.error("생성 실패");
+      }
+  };
+
+  // --- [쿠폰 관리] 삭제 ---
+  const handleDeleteCoupon = async (id) => {
+      await deleteDoc(doc(db, "coupons", id));
+      message.success("쿠폰 삭제됨");
+  };
+
+  // --- 유저 테이블 컬럼 ---
+  const userColumns = [
     {
-      title: '유저명 (ID)',
-      dataIndex: 'id',
-      key: 'id',
-      render: text => <span style={{fontWeight:'bold', color:'white'}}>{text}</span>,
+      title: '유저정보',
+      key: 'userinfo',
+      width: 180,
+      render: (_, record) => (
+          <div>
+              <div style={{fontWeight:'bold', color:'white', fontSize: 14}}>{record.id}</div>
+              <div style={{fontSize: 11, color: '#9ca3af', marginTop: 4}}>
+                 {record.role === 'super_admin' ? <Tag color="gold">최고관리자</Tag> : 
+                  record.role === 'admin' ? <Tag color="orange">관리자</Tag> : <Tag color="blue">회원</Tag>}
+              </div>
+          </div>
+      ),
       filteredValue: [searchText],
       onFilter: (value, record) => String(record.id).toLowerCase().includes(value.toLowerCase()),
     },
+    // 🔥 [복구] 접속 로그 및 상태
     {
-      title: '등급',
-      dataIndex: 'role',
-      key: 'role',
-      render: role => {
-        let color = 'default';
-        if (role === 'super_admin') color = 'gold';
-        if (role === 'admin') color = 'orange';
-        if (role === 'distributor') color = 'cyan';
-        if (role === 'user') color = 'blue';
-        return <Tag color={color}>{role.toUpperCase()}</Tag>;
-      }
+      title: '접속 정보',
+      key: 'connection',
+      render: (_, record) => (
+          <div style={{fontSize: 12}}>
+              <div style={{color: '#e5e7eb'}}>
+                  <WifiOutlined style={{marginRight: 5, color: '#10b981'}} /> 
+                  IP: {record.ipAddress || '기록없음'}
+              </div>
+              <div style={{color: '#9ca3af', marginTop: 2}}>
+                  Last: {record.lastLogout ? dayjs(record.lastLogout.toDate()).format('MM-DD HH:mm') : '-'}
+              </div>
+              {record.isBlocked && <Tag color="red" style={{marginTop: 4}}>🚫 접속차단됨</Tag>}
+          </div>
+      )
     },
     {
-      title: '이용권 만료일',
-      dataIndex: 'expiryDate',
-      key: 'expiryDate',
-      render: (date, record) => {
+      title: '이용권',
+      key: 'expiry',
+      render: (_, record) => {
         if (['super_admin', 'admin'].includes(record.role)) return <Tag color="gold">무제한</Tag>;
-        if (!date) return <Tag color="red">미등록</Tag>;
-        const d = date.toDate();
-        const isExpired = d < new Date();
-        return <Tag color={isExpired ? "red" : "green"}>{dayjs(d).format('YYYY-MM-DD HH:mm')}</Tag>;
+        if (!record.expiryDate) return <Tag color="red">만료됨</Tag>;
+        const d = record.expiryDate.toDate();
+        return <Tag color={d < new Date() ? "red" : "geekblue"}>{dayjs(d).format('YYYY-MM-DD HH:mm')}</Tag>;
       }
     },
-    // 🔥 [핵심] 텔레그램 관리 컬럼
+    // 🔥 [통합] 텔레그램 관리
     {
-      title: <span><RobotOutlined /> 텔레그램 상태</span>,
+      title: <span><RobotOutlined /> 텔레그램</span>,
       key: 'telegram',
-      width: 280,
+      width: 220,
       render: (_, record) => {
         const hasChatId = !!record.telegramChatId;
         const isActive = record.isTelegramActive;
-        const strategy = record.strategyLevel || 1; // 유저 설정 단계
-        const isBlocked = record.isTelegramBlocked || false; // 관리자 차단 여부
+        const isBlocked = record.isTelegramBlocked || false;
 
-        if (!hasChatId) return <Tag color="default" style={{color:'#6b7280'}}>미신청</Tag>;
+        if (!hasChatId) return <span style={{color:'#6b7280', fontSize:12}}>미연동</span>;
 
         return (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '5px 0' }}>
-            {/* 1줄: 아이디 & 유저 설정 상태 */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <Tooltip title={`Chat ID: ${record.telegramChatId}`}>
-                    <Tag color="geekblue" icon={<RobotOutlined />}>
-                        {record.telegramChatId.substring(0, 6)}...
-                    </Tag>
-                </Tooltip>
-                
-                {/* 유저가 켰는지 껐는지 표시 */}
-                <Badge status={isActive ? "processing" : "default"} text={isActive ? <span style={{color:'#10b981', fontSize:12}}>수신ON</span> : <span style={{color:'#6b7280', fontSize:12}}>수신OFF</span>} />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <Tag color="purple">{record.telegramChatId.substring(0, 6)}..</Tag>
+                <Tag color={isActive ? "success" : "default"}>{isActive ? "ON" : "OFF"}</Tag>
             </div>
-            
-            {/* 2줄: 설정 단계 & 관리자 차단 스위치 */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background:'rgba(255,255,255,0.05)', padding:'4px 8px', borderRadius: 4 }}>
-                <div style={{display:'flex', alignItems:'center', gap:5}}>
-                    <ThunderboltOutlined style={{color: '#f59e0b'}} />
-                    <span style={{color: '#e5e7eb', fontWeight:'bold', fontSize: 12}}>
-                        {strategy}단계 설정
-                    </span>
-                </div>
-
-                <div style={{display:'flex', alignItems:'center', gap: 5}}>
-                    <span style={{fontSize: 11, color: isBlocked ? '#ef4444' : '#10b981'}}>
-                        {isBlocked ? "차단됨" : "허용됨"}
-                    </span>
-                    <Switch 
-                        size="small"
-                        checked={!isBlocked} // 차단 안됐으면 켜짐(초록)
-                        onChange={() => toggleTelegramBlock(record)}
-                        style={{ background: isBlocked ? '#ef4444' : '#10b981' }}
-                    />
-                </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems:'center', fontSize:11 }}>
+                <span style={{color:'#f59e0b'}}><ThunderboltOutlined /> {record.strategyLevel || 1}단계</span>
+                <Switch size="small" checked={!isBlocked} onChange={() => toggleTelegramBlock(record)} />
             </div>
           </div>
         );
@@ -217,10 +248,16 @@ const Admin = () => {
       title: '관리',
       key: 'action',
       render: (_, record) => (
-        <div style={{display:'flex', gap: 8}}>
-            <Button size="small" icon={<EditOutlined />} onClick={() => { setEditingUser(record); form.setFieldsValue({ ...record, expiryDate: record.expiryDate ? dayjs(record.expiryDate.toDate()) : null }); setIsModalVisible(true); }}>수정</Button>
+        <div style={{display:'flex', gap: 5, flexWrap:'wrap'}}>
+            <Button size="small" icon={<EditOutlined />} onClick={() => { setEditingUser(record); form.setFieldsValue({ ...record, expiryDate: record.expiryDate ? dayjs(record.expiryDate.toDate()) : null }); setIsUserModalVisible(true); }} />
             <Button size="small" type="primary" onClick={() => extendTime(record.id, 30)}>+30일</Button>
-            <Popconfirm title="삭제하시겠습니까?" onConfirm={() => handleDelete(record.id)}>
+            
+            {/* 🔥 [복구] 접속 차단 버튼 */}
+            <Tooltip title={record.isBlocked ? "차단 해제" : "접속 차단"}>
+                <Button size="small" style={{background: record.isBlocked ? '#10b981' : '#f59e0b', border:'none', color:'white'}} icon={record.isBlocked ? <UnlockOutlined /> : <LockOutlined />} onClick={() => toggleUserBlock(record)} />
+            </Tooltip>
+
+            <Popconfirm title="영구 삭제하시겠습니까?" onConfirm={() => handleDeleteUser(record.id)}>
                 <Button size="small" danger icon={<DeleteOutlined />} />
             </Popconfirm>
         </div>
@@ -228,67 +265,109 @@ const Admin = () => {
     }
   ];
 
-  // 통계 집계
-  const totalUsers = users.length;
-  const activeUsers = users.filter(u => u.expiryDate && u.expiryDate.toDate() > new Date()).length;
-  const telegramUsers = users.filter(u => u.telegramChatId && u.isTelegramActive && !u.isTelegramBlocked).length;
+  // --- 쿠폰 테이블 컬럼 ---
+  const couponColumns = [
+      { title: '쿠폰 코드', dataIndex: 'code', key: 'code', render: text => <Tag color="cyan" style={{fontSize:14, padding:'5px 10px'}}>{text}</Tag> },
+      { title: '기간', dataIndex: 'days', key: 'days', render: d => <b>{d}일</b> },
+      { title: '상태', key: 'status', render: (_, r) => r.isUsed ? <Tag color="red">사용완료 ({r.usedBy})</Tag> : <Tag color="green">사용가능</Tag> },
+      { title: '생성일', dataIndex: 'createdAt', render: d => <span style={{color:'#9ca3af'}}>{d ? dayjs(d.toDate()).format('MM-DD HH:mm') : '-'}</span> },
+      { title: '삭제', key: 'del', render: (_, r) => <Button danger size="small" icon={<DeleteOutlined />} onClick={() => handleDeleteCoupon(r.id)} /> }
+  ];
 
   return (
     <AdminLayout>
+        {/* 상단 헤더 */}
         <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: 20}}>
-            <h1 style={{color:'white', margin:0, fontSize:24, fontWeight:900}}>ADMIN DASHBOARD</h1>
-            <Button type="primary" icon={<UserAddOutlined />} onClick={() => { setEditingUser(null); form.resetFields(); setIsModalVisible(true); }} size="large" style={{background:'#2563eb'}}>
-                신규 유저 생성
-            </Button>
+            <h1 style={{color:'white', margin:0, fontSize:24, fontWeight:900}}>ADMIN CONSOLE</h1>
+            <div style={{display:'flex', gap: 10}}>
+                <Button icon={<BarcodeOutlined />} onClick={() => setIsCouponModalVisible(true)} size="large" style={{background:'#0f766e', color:'white', border:'none', fontWeight:'bold'}}>
+                    쿠폰 관리
+                </Button>
+                <Button type="primary" icon={<UserAddOutlined />} onClick={() => { setEditingUser(null); form.resetFields(); setIsUserModalVisible(true); }} size="large" style={{fontWeight:'bold'}}>
+                    신규 유저 생성
+                </Button>
+            </div>
         </div>
 
+        {/* 통계 카드 */}
         <Row gutter={16} style={{marginBottom: 24}}>
-            <Col span={8}>
-                <StatsCard><Statistic title="총 회원수" value={totalUsers} prefix={<UserAddOutlined />} /></StatsCard>
-            </Col>
-            <Col span={8}>
-                <StatsCard><Statistic title="활성 이용자" value={activeUsers} valueStyle={{color: '#10b981'}} prefix={<CheckCircleOutlined />} /></StatsCard>
-            </Col>
-            <Col span={8}>
-                <StatsCard><Statistic title="텔레그램 알림 발송중" value={telegramUsers} valueStyle={{color: '#3b82f6'}} prefix={<RobotOutlined />} /></StatsCard>
-            </Col>
+            <Col span={6}><StatsCard><Statistic title="총 회원수" value={users.length} prefix={<UserAddOutlined />} /></StatsCard></Col>
+            <Col span={6}><StatsCard><Statistic title="활성 이용자" value={users.filter(u=>u.expiryDate?.toDate()>new Date()).length} valueStyle={{color:'#10b981'}} prefix={<CheckCircleOutlined />} /></StatsCard></Col>
+            <Col span={6}><StatsCard><Statistic title="텔레그램 알림중" value={users.filter(u=>u.isTelegramActive && u.telegramChatId && !u.isTelegramBlocked).length} valueStyle={{color:'#3b82f6'}} prefix={<RobotOutlined />} /></StatsCard></Col>
+            <Col span={6}><StatsCard><Statistic title="미사용 쿠폰" value={coupons.filter(c=>!c.isUsed).length} valueStyle={{color:'#f59e0b'}} prefix={<BarcodeOutlined />} /></StatsCard></Col>
         </Row>
 
+        {/* 검색창 */}
         <div style={{marginBottom: 16, display:'flex', justifyContent:'flex-end'}}>
-            <Input placeholder="유저 아이디 검색..." prefix={<SearchOutlined />} onChange={e => setSearchText(e.target.value)} style={{width: 250, background:'#1f2937', border:'1px solid #374151', color:'white'}} />
+            <Input placeholder="ID 검색..." prefix={<SearchOutlined />} onChange={e => setSearchText(e.target.value)} style={{width: 250, background:'#1f2937', border:'1px solid #374151', color:'white'}} />
         </div>
 
+        {/* 메인 유저 테이블 */}
         <StyledTable 
-            columns={columns} 
+            columns={userColumns} 
             dataSource={users} 
             rowKey="id" 
             loading={loading}
-            pagination={{ pageSize: 10 }} 
+            pagination={{ pageSize: 8 }} 
         />
 
+        {/* --- [모달 1] 유저 생성/수정 --- */}
         <Modal
             title={editingUser ? "유저 정보 수정" : "신규 유저 생성"}
-            open={isModalVisible}
-            onOk={handleOk}
-            onCancel={() => setIsModalVisible(false)}
+            open={isUserModalVisible}
+            onOk={handleUserOk}
+            onCancel={() => setIsUserModalVisible(false)}
         >
             <Form form={form} layout="vertical">
-                <Form.Item name="username" label="아이디 (Email)" rules={[{ required: true }]}>
+                <Form.Item name="username" label="아이디" rules={[{ required: true }]}>
                     <Input disabled={!!editingUser} />
                 </Form.Item>
-                <Form.Item name="role" label="등급" rules={[{ required: true }]}>
+                {/* 🔥 [복구] 생성 시 비밀번호(코드) 입력 필드 */}
+                {!editingUser && (
+                    <Form.Item name="password" label="비밀번호 (코드)" rules={[{ required: true }]}>
+                        <Input.Password placeholder="유저에게 전달할 코드 입력" />
+                    </Form.Item>
+                )}
+                <Form.Item name="role" label="등급" initialValue="user">
                     <Select>
-                        <Option value="user">일반 회원 (User)</Option>
-                        <Option value="store">매장 (Store)</Option>
-                        <Option value="distributor">총판 (Distributor)</Option>
-                        <Option value="admin">관리자 (Admin)</Option>
+                        <Option value="user">일반 회원</Option>
+                        <Option value="store">매장</Option>
+                        <Option value="distributor">총판</Option>
+                        <Option value="admin">관리자</Option>
                     </Select>
                 </Form.Item>
-                <Form.Item name="expiryDate" label="만료일 설정">
+                <Form.Item name="expiryDate" label="만료일">
                     <DatePicker showTime style={{width:'100%'}} />
                 </Form.Item>
             </Form>
         </Modal>
+
+        {/* --- [모달 2] 쿠폰 관리 --- */}
+        <Modal
+            title="쿠폰 관리 시스템"
+            open={isCouponModalVisible}
+            onCancel={() => setIsCouponModalVisible(false)}
+            footer={null}
+            width={700}
+        >
+            <div style={{display:'flex', gap:10, marginBottom: 20, padding: 15, background:'#f3f4f6', borderRadius:8}}>
+                <Form form={couponForm} layout="inline" onFinish={handleCreateCoupon}>
+                    <Form.Item name="days" label="기간(일)" initialValue={30} rules={[{required:true}]}>
+                        <Input type="number" style={{width:100}} />
+                    </Form.Item>
+                    <Button type="primary" htmlType="submit" icon={<ThunderboltOutlined />}>쿠폰 생성</Button>
+                </Form>
+            </div>
+            
+            <Table 
+                dataSource={coupons} 
+                columns={couponColumns} 
+                rowKey="id" 
+                pagination={{pageSize:5}} 
+                size="small"
+            />
+        </Modal>
+
     </AdminLayout>
   );
 };
