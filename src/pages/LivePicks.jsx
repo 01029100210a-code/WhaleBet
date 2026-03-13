@@ -14,7 +14,7 @@ const { Text } = Typography;
 const TENSION_SOUND_URL = "https://assets.mixkit.co/active_storage/sfx/209/209-preview.mp3"; 
 const FANFARE_SOUND_URL = "https://assets.mixkit.co/active_storage/sfx/2019/2019-preview.mp3";
 
-// --- ✨ 애니메이션 ---
+// --- ✨ 애니메이션 (깜빡임 유지) ---
 const pulseGold = keyframes`
   0% { box-shadow: 0 0 0 0 rgba(212, 175, 55, 0.4); border-color: #d4af37; }
   70% { box-shadow: 0 0 0 10px rgba(212, 175, 55, 0); border-color: #ffd700; }
@@ -120,7 +120,7 @@ const GameCard = styled.div`
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  min-height: 220px; 
+  min-height: 240px; 
   border: 1px solid #4b5563;
   position: relative;
   transition: transform 0.3s ease;
@@ -132,11 +132,13 @@ const GameCard = styled.div`
     background: linear-gradient(145deg, #1f2937 0%, #292524 100%);
   }
   
+  /* 진입 임박 시 깜빡임 유지 */
   &.imminent {
     animation: ${pulseGold} 1.5s infinite;
     border-width: 2px;
   }
 
+  /* 배팅 시 깜빡임 유지 */
   &.betting {
     border-color: #ef4444;
     animation: ${pulseRed} 1.5s infinite;
@@ -144,31 +146,14 @@ const GameCard = styled.div`
   }
 `;
 
-const CountBox = styled.div`
-  border: 1px solid #d4af37;
-  background: rgba(212, 175, 55, 0.05);
-  border-radius: 12px;
-  padding: 10px;
-  text-align: center;
-  margin: 10px 0;
-`;
-
-const CountNumber = styled.div`
-  font-size: 42px;
-  font-weight: 800;
-  color: #fbbf24;
-  line-height: 1;
-  text-shadow: 0 0 15px rgba(251, 191, 36, 0.3);
-  margin-top: 5px;
-`;
-
+// [수정] 폰트 크기 및 스타일 조정
 const PickDisplay = styled.div`
-  font-size: 34px;
+  font-size: 42px; /* 폰트 더 키움 */
   font-weight: 900;
   letter-spacing: -1px;
   text-align: center;
-  margin: 10px 0;
-  line-height: 1.2;
+  line-height: 1;
+  margin-top: 15px;
   
   &.P { color: #3b82f6; text-shadow: 0 0 20px rgba(59, 130, 246, 0.5); }
   &.B { color: #ef4444; text-shadow: 0 0 20px rgba(239, 68, 68, 0.5); }
@@ -200,6 +185,16 @@ const DarkTable = styled(Table)`
   .ant-table-tbody > tr:hover > td { background: #111827 !important; }
   .ant-pagination-item-link, .ant-pagination-item { background: transparent !important; border-color: #374151 !important; a { color: #9ca3af !important; } }
   .ant-pagination-item-active { border-color: #d4af37 !important; a { color: #d4af37 !important; } }
+`;
+
+// [중요] 내용을 수직/수평 중앙 정렬해주는 컨테이너
+const CenterContent = styled.div`
+  flex: 1; /* 남은 공간을 모두 차지 */
+  display: flex;
+  flex-direction: column;
+  justify-content: center; /* 수직 중앙 */
+  align-items: center; /* 수평 중앙 */
+  width: 100%;
 `;
 
 const LivePicks = () => {
@@ -262,11 +257,8 @@ const LivePicks = () => {
     };
   }, [bettingRooms.length, isSoundEnabled]);
 
-  // Firestore Snapshot (Rooms)
   useEffect(() => {
-    // 🔥 [수정] 정렬 없이 가져옴 (이름순 정렬을 위해)
-    const q = query(collection(db, "rooms"));
-    
+    const q = query(collection(db, "rooms")); 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const roomData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       
@@ -274,9 +266,8 @@ const LivePicks = () => {
       const betting = roomData.filter(r => r.phase === 'BETTING' && r.step >= userEntryLevel);
       const idle = roomData.length - waiting.length - betting.length;
       
-      // 🔥 [수정] 화면 흔들림 방지를 위해 '이름순(가나다)' 고정 정렬
+      // 이름순 정렬
       waiting.sort((a, b) => a.room_name.localeCompare(b.room_name));
-      
       betting.sort((a, b) => b.step - a.step);
 
       setWaitingRooms(waiting);
@@ -287,7 +278,6 @@ const LivePicks = () => {
     return () => unsubscribe();
   }, [userEntryLevel]);
 
-  // History & Stats
   useEffect(() => {
     const q = query(collection(db, "game_history"), orderBy("created_at", "desc"), limit(100));
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -352,6 +342,7 @@ const LivePicks = () => {
       </HeaderContainer>
 
       <HistoryPanel>
+        {/* 통계 부분 유지 */}
         <div style={{textAlign:'center'}}>
             <div style={{color:'#9ca3af', marginBottom: 5, fontSize:12}}>TOTAL WIN RATE</div>
             <Progress type="circle" percent={stats.winRate} width={80} strokeColor="#10b981" trailColor="#374151" format={percent => <span style={{color:'white', fontWeight:'bold'}}>{percent}%</span>} />
@@ -368,6 +359,7 @@ const LivePicks = () => {
         </div>
       </HistoryPanel>
 
+      {/* WAITING ZONE */}
       <div style={{marginBottom: 30}}>
           <SectionTitle className="gold">
             <ThunderboltOutlined className="icon" />
@@ -385,41 +377,46 @@ const LivePicks = () => {
                     return (
                         <Col xs={24} sm={12} md={8} lg={6} xl={6} key={room.id}>
                             <GameCard className={`waiting ${isCountdown ? 'imminent' : ''}`}>
-                                <div style={{color:'white', fontWeight:'bold', fontSize: 16, marginBottom: 10}}>
+                                <div style={{color:'white', fontWeight:'bold', fontSize: 16, textAlign:'left'}}>
                                     {room.room_name}
                                 </div>
 
-                                {isCountdown ? (
-                                    <div style={{textAlign:'center'}}>
-                                        <CountBox>
-                                            <Text style={{color:'#9ca3af', fontSize:10, letterSpacing:2}}>CHECKING</Text>
-                                            <CountNumber>{remaining}</CountNumber>
-                                        </CountBox>
-                                        <div style={{marginTop: 10}}>
-                                            <Text style={{color:'#9ca3af', fontSize:10}}>ENTRY PREPARE</Text>
-                                            <PickDisplay className={room.pick}>
-                                                {room.pick === 'P' ? 'PLAYER' : 'BANKER'}
-                                            </PickDisplay>
+                                {/* 중앙 정렬 영역 */}
+                                <CenterContent>
+                                    {isCountdown ? (
+                                        <div style={{textAlign:'center'}}>
+                                            {/* 🔥 숫자 박스(Checking 3 2 1) 제거됨 */}
+                                            {/* 대신 경고 문구 추가 */}
+                                            <Text style={{color:'#fbbf24', fontSize:14, fontWeight:'bold', letterSpacing:1}}>
+                                                ⚠️ 진입 임박 ({remaining}판 전)
+                                            </Text>
+                                            
+                                            <div style={{marginTop: 15}}>
+                                                <Text style={{color:'#9ca3af', fontSize:10}}>ENTRY PREPARE</Text>
+                                                <PickDisplay className={room.pick}>
+                                                    {room.pick === 'P' ? 'PLAYER' : 'BANKER'}
+                                                </PickDisplay>
+                                            </div>
                                         </div>
-                                    </div>
-                                ) : (
-                                    <div style={{textAlign:'center', padding: '20px 0'}}>
-                                        <ScanOutlined spin style={{ fontSize: 40, color: '#4b5563', marginBottom: 15 }} />
-                                        <Text style={{ display: 'block', color: '#6b7280', fontSize: 14, fontWeight: 'bold' }}>
-                                            패턴 정밀 분석중
-                                        </Text>
-                                        <Text style={{ display: 'block', color: '#4b5563', fontSize: 12, marginTop: 5 }}>
-                                            데이터 수집 단계
-                                        </Text>
-                                    </div>
-                                )}
+                                    ) : (
+                                        <div style={{textAlign:'center'}}>
+                                            <ScanOutlined spin style={{ fontSize: 40, color: '#4b5563', marginBottom: 15 }} />
+                                            <Text style={{ display: 'block', color: '#6b7280', fontSize: 14, fontWeight: 'bold' }}>
+                                                패턴 정밀 분석중
+                                            </Text>
+                                            <Text style={{ display: 'block', color: '#4b5563', fontSize: 12, marginTop: 5 }}>
+                                                데이터 수집 단계
+                                            </Text>
+                                        </div>
+                                    )}
+                                </CenterContent>
 
-                                <div style={{display:'flex', justifyContent:'space-between', marginTop:'auto', paddingTop: 15, borderTop:'1px solid #374151'}}>
+                                <div style={{display:'flex', justifyContent:'space-between', paddingTop: 15, borderTop:'1px solid #374151'}}>
                                     <span style={{color:'#10b981', fontSize:12}}>
                                         <ScanOutlined /> AI-{room.ai_num}
                                     </span>
                                     {isCountdown ? (
-                                        <Tag color="gold" style={{fontWeight:'bold'}}>진입 임박</Tag>
+                                        <Tag color="gold" style={{fontWeight:'bold'}}>진입 대기</Tag>
                                     ) : (
                                         <Tag color="default">분석중</Tag>
                                     )}
@@ -432,6 +429,7 @@ const LivePicks = () => {
           )}
       </div>
 
+      {/* ACTIVE BETTING */}
       <div style={{marginBottom: 30}}>
           <SectionTitle className="red">
             <FireOutlined className="icon" />
@@ -444,14 +442,23 @@ const LivePicks = () => {
                 {bettingRooms.map((room) => (
                 <Col xs={24} sm={12} md={8} lg={6} xl={6} key={room.id}>
                     <GameCard className="betting">
-                        <div style={{color:'white', fontWeight:'bold', fontSize: 15}}>{room.room_name}</div>
-                        <div style={{textAlign:'center'}}>
-                            <div style={{fontSize:10, color:'#ef4444', marginBottom: 5}}>
-                                <SoundOutlined spin /> BETTING LIVE
-                            </div>
-                            <PickDisplay className={room.pick}>{room.pick === 'P' ? 'PLAYER' : 'BANKER'}</PickDisplay>
+                        <div style={{color:'white', fontWeight:'bold', fontSize: 15, textAlign:'left'}}>
+                            {room.room_name}
                         </div>
-                        <div style={{display:'flex', justifyContent:'space-between', marginTop:'auto'}}>
+
+                        {/* 🔥 완벽한 중앙 정렬 (flex: 1) */}
+                        <CenterContent>
+                            <div style={{textAlign:'center'}}>
+                                <div style={{fontSize:11, color:'#ef4444', marginBottom: 10, letterSpacing:1}}>
+                                    <SoundOutlined spin /> BETTING LIVE
+                                </div>
+                                <PickDisplay className={room.pick}>
+                                    {room.pick === 'P' ? 'PLAYER' : 'BANKER'}
+                                </PickDisplay>
+                            </div>
+                        </CenterContent>
+                        
+                        <div style={{display:'flex', justifyContent:'space-between', paddingTop: 15, borderTop:'1px solid #374151'}}>
                             <span style={{color:'#10b981', fontSize:12}}><ScanOutlined /> AI-{room.ai_num}</span>
                             <Tag color="#f50">{room.step}단계 진행 🔥</Tag>
                         </div>
