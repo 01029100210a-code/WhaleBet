@@ -10,8 +10,9 @@ import { db } from '../firebase';
 
 const { Text } = Typography;
 
-// --- 🎵 사운드 파일 ---
-const TENSION_SOUND_URL = "https://assets.mixkit.co/active_storage/sfx/209/209-preview.mp3"; 
+// --- 🎵 사운드 파일 수정 ---
+// [변경] 기존 209번(웅장한 소리) -> 명확한 '삐-삐-' 경고음으로 변경 (Mixkit Alert)
+const TENSION_SOUND_URL = "https://assets.mixkit.co/active_storage/sfx/995/995-preview.mp3"; 
 const FANFARE_SOUND_URL = "https://assets.mixkit.co/active_storage/sfx/2019/2019-preview.mp3";
 
 // --- ✨ 애니메이션 정의 ---
@@ -224,7 +225,6 @@ const RainbowText = styled.div`
   letter-spacing: -0.5px;
 `;
 
-// 🔥 [오류 수정] 애니메이션이 적용된 스타일 컴포넌트를 별도로 생성
 const BettingAlertText = styled.div`
   font-size: 12px;
   color: #ef4444;
@@ -272,16 +272,19 @@ const LivePicks = () => {
   // 오디오 초기화
   useEffect(() => {
     tensionAudioRef.current = new Audio(TENSION_SOUND_URL);
-    tensionAudioRef.current.volume = 0.5;
+    tensionAudioRef.current.volume = 0.6; // 적절한 볼륨
+    tensionAudioRef.current.preload = 'auto'; // 미리 로드
 
     fanfareAudioRef.current = new Audio(FANFARE_SOUND_URL);
     fanfareAudioRef.current.volume = 0.7;
+    fanfareAudioRef.current.preload = 'auto';
   }, []);
 
   // 사운드 토글 함수
   const toggleSound = () => {
     if (isSoundEnabled) {
       setIsSoundEnabled(false);
+      // 소리 끄면 즉시 정지
       if (tensionAudioRef.current) {
         tensionAudioRef.current.pause();
         tensionAudioRef.current.currentTime = 0;
@@ -292,6 +295,7 @@ const LivePicks = () => {
       }
     } else {
       setIsSoundEnabled(true);
+      // 브라우저 정책 우회를 위해 짧게 재생 후 정지
       const unlockAudio = async () => {
         try {
           if (tensionAudioRef.current) {
@@ -305,40 +309,52 @@ const LivePicks = () => {
               fanfareAudioRef.current.currentTime = 0;
           }
         } catch (e) {
-          console.warn("Audio unlock failed:", e);
+          console.warn("Audio unlock failed (user interaction needed):", e);
         }
       };
       unlockAudio();
     }
   };
 
+  // 배팅 중인지 여부 (안정적인 boolean 값)
   const hasActiveBetting = bettingRooms.length > 0;
 
-  // 배팅 알림음 루프
+  // 🔥 [핵심 수정] 배팅 알림음 루프 로직
   useEffect(() => {
     let intervalId = null;
 
     if (isSoundEnabled && hasActiveBetting) {
-      const playSound = async () => {
-        if (tensionAudioRef.current) {
-          try {
-            tensionAudioRef.current.currentTime = 0;
-            await tensionAudioRef.current.play();
-          } catch (e) {
-            console.error("Play sound error:", e);
-          }
+      const playBeep = async () => {
+        const audio = tensionAudioRef.current;
+        if (!audio) return;
+
+        try {
+            // 소리가 겹치지 않도록 초기화 후 재생
+            audio.currentTime = 0;
+            await audio.play();
+        } catch (e) {
+            console.error("Beep sound error:", e);
         }
       };
-      playSound();
-      intervalId = setInterval(playSound, 3000);
+
+      // 1. 즉시 한 번 재생
+      playBeep();
+
+      // 2. 2초 간격으로 반복 재생 (새로운 알람 소리에 맞춰 2초 설정)
+      intervalId = setInterval(playBeep, 2000);
+
     } else {
+      // 배팅이 끝나거나 소리를 끄면 정지
       if (tensionAudioRef.current) {
         tensionAudioRef.current.pause();
         tensionAudioRef.current.currentTime = 0;
       }
     }
-    return () => { if (intervalId) clearInterval(intervalId); };
-  }, [isSoundEnabled, hasActiveBetting]); 
+
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [isSoundEnabled, hasActiveBetting]); // bettingRooms 자체가 바뀌어도 hasActiveBetting 값만 같으면 불필요하게 재시작 안 함
 
   // Firestore Listeners
   useEffect(() => {
@@ -360,6 +376,7 @@ const LivePicks = () => {
     return () => unsubscribe();
   }, [userEntryLevel]);
 
+  // 승리 사운드 및 히스토리
   useEffect(() => {
     const q = query(collection(db, "game_history"), orderBy("created_at", "desc"), limit(100));
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -367,7 +384,9 @@ const LivePicks = () => {
         snapshot.docChanges().forEach((change) => {
           if (change.type === "added") {
             const data = change.doc.data();
+            // 승리 시 팡파레
             if (isSoundEnabled && data.result === 'WIN' && fanfareAudioRef.current) {
+                // 배팅 소리와 겹칠 수 있으므로 배팅 소리 잠시 줄이거나 멈출 수도 있지만, 여기선 그냥 재생
                 fanfareAudioRef.current.currentTime = 0;
                 fanfareAudioRef.current.play().catch(() => {});
             }
@@ -409,7 +428,7 @@ const LivePicks = () => {
         align: 'center', 
         render: (res) => (
             <span style={{
-                color: res === 'WIN' ? '#39ff14' : '#ff4d4f', // 형광 녹색
+                color: res === 'WIN' ? '#39ff14' : '#ff4d4f',
                 fontWeight: '900',
                 textShadow: res === 'WIN' ? '0 0 10px rgba(57, 255, 20, 0.4)' : 'none',
                 fontSize: '14px'
@@ -535,7 +554,6 @@ const LivePicks = () => {
 
                         <CenterContent>
                             <div style={{textAlign:'center'}}>
-                                {/* 🔥 [수정] 인라인 스타일 애니메이션 제거 후 스타일 컴포넌트로 대체 */}
                                 <BettingAlertText>
                                     <SoundOutlined /> BETTING LIVE
                                 </BettingAlertText>
