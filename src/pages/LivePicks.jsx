@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Row, Col, Spin, Empty, Tag, Statistic, Progress, Table, Typography } from 'antd';
 import { 
   TrophyOutlined, ThunderboltOutlined, ScanOutlined, FireOutlined, 
-  AimOutlined, HistoryOutlined, SoundOutlined, MutedOutlined, CheckCircleOutlined 
+  AimOutlined, HistoryOutlined, SoundOutlined, MutedOutlined 
 } from '@ant-design/icons';
 import styled, { keyframes } from 'styled-components';
 import { collection, onSnapshot, query, orderBy, limit } from "firebase/firestore";
@@ -120,7 +120,7 @@ const GameCard = styled.div`
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  min-height: 220px; /* 높이 약간 조정 */
+  min-height: 220px; 
   border: 1px solid #4b5563;
   position: relative;
   transition: transform 0.3s ease;
@@ -135,6 +135,7 @@ const GameCard = styled.div`
   /* 진입 임박 시 깜빡임 */
   &.imminent {
     animation: ${pulseGold} 1.5s infinite;
+    border-width: 2px;
   }
 
   &.betting {
@@ -144,7 +145,7 @@ const GameCard = styled.div`
   }
 `;
 
-// [NEW] 카운트다운 박스 스타일
+// [NEW] 카운트다운 박스 스타일 (고정된 디자인)
 const CountBox = styled.div`
   border: 1px solid #d4af37;
   background: rgba(212, 175, 55, 0.05);
@@ -216,7 +217,6 @@ const LivePicks = () => {
 
   const userEntryLevel = parseInt(localStorage.getItem('entryLevel')) || 1; 
 
-  // Refs
   const tensionAudioRef = useRef(new Audio(TENSION_SOUND_URL));
   const fanfareAudioRef = useRef(new Audio(FANFARE_SOUND_URL));
   const isFirstLoad = useRef(true);
@@ -228,7 +228,6 @@ const LivePicks = () => {
 
   const toggleSound = () => {
     if (!isSoundEnabled) {
-      // 권한 획득용 짧은 재생
       tensionAudioRef.current.play().then(() => {
         tensionAudioRef.current.pause(); tensionAudioRef.current.currentTime = 0;
       }).catch(() => {});
@@ -243,7 +242,6 @@ const LivePicks = () => {
     }
   };
 
-  // Sound Logic (Active Betting)
   useEffect(() => {
     let intervalId = null;
     if (isSoundEnabled && bettingRooms.length > 0) {
@@ -266,7 +264,6 @@ const LivePicks = () => {
     };
   }, [bettingRooms.length, isSoundEnabled]);
 
-  // Firestore Snapshot (Rooms)
   useEffect(() => {
     const q = query(collection(db, "rooms"), orderBy("updated_at", "desc"));
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -285,7 +282,6 @@ const LivePicks = () => {
     return () => unsubscribe();
   }, [userEntryLevel]);
 
-  // History & Stats
   useEffect(() => {
     const q = query(collection(db, "game_history"), orderBy("created_at", "desc"), limit(100));
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -341,7 +337,7 @@ const LivePicks = () => {
   return (
     <Container>
       
-      {/* 🔹 헤더 & 사운드 */}
+      {/* 🔹 헤더 */}
       <HeaderContainer>
         <DashboardTitle>WHALEBET DASHBOARD</DashboardTitle>
         <SoundToggleBtn onClick={toggleSound} active={isSoundEnabled}>
@@ -350,7 +346,7 @@ const LivePicks = () => {
         </SoundToggleBtn>
       </HeaderContainer>
 
-      {/* 1. 통계 패널 */}
+      {/* 1. 통계 */}
       <HistoryPanel>
         <div style={{textAlign:'center'}}>
             <div style={{color:'#9ca3af', marginBottom: 5, fontSize:12}}>TOTAL WIN RATE</div>
@@ -368,7 +364,7 @@ const LivePicks = () => {
         </div>
       </HistoryPanel>
 
-      {/* 2. 🔥 Waiting Zone (수정됨) */}
+      {/* 2. 🔥 Waiting Zone (수정됨: 슬라이더 완전 제거) */}
       <div style={{marginBottom: 30}}>
           <SectionTitle className="gold">
             <ThunderboltOutlined className="icon" />
@@ -380,10 +376,9 @@ const LivePicks = () => {
           ) : (
             <Row gutter={[20, 20]} justify="center">
                 {waitingRooms.map((room) => {
-                    // ⚠️ 핵심 로직: 남은 횟수(remaining)가 없으면 기본값 10으로 처리하여 분석중 화면 보여줌
-                    // DB에 remaining 필드가 있다면 그 값을 사용합니다.
+                    // 남은 횟수 체크 (없으면 기본값 10)
                     const remaining = room.remaining !== undefined ? room.remaining : 10;
-                    const isCountdown = remaining <= 3; 
+                    const isCountdown = remaining <= 3; // 3판 이하일 때만 카운트다운
 
                     return (
                         <Col xs={24} sm={12} md={8} lg={6} xl={6} key={room.id}>
@@ -394,7 +389,7 @@ const LivePicks = () => {
 
                                 {/* [조건부 렌더링] 3판 이하일 때 vs 아닐 때 */}
                                 {isCountdown ? (
-                                    // 3, 2, 1 카운트다운 화면
+                                    // 3, 2, 1 카운트다운 화면 (슬라이드 아님!)
                                     <div style={{textAlign:'center'}}>
                                         <CountBox>
                                             <Text style={{color:'#9ca3af', fontSize:10, letterSpacing:2}}>CHECKING</Text>
@@ -469,7 +464,7 @@ const LivePicks = () => {
           )}
       </div>
 
-      {/* 4. 히스토리 */}
+      {/* 4. 히스토리 & 5. AI Scan */}
       <div style={{marginBottom: 30, background: '#111827', padding: 20, borderRadius: 16, border: '1px solid #374151'}}>
         <h3 style={{color:'white', marginBottom: 15}}><HistoryOutlined /> Recent Results</h3>
         <DarkTable 
@@ -481,7 +476,6 @@ const LivePicks = () => {
         />
       </div>
 
-      {/* 5. AI Scan */}
       <ScanZone>
         <div className="scan-bar"></div>
         <ScanOutlined style={{ fontSize: 32, color: '#00e5ff', marginBottom: 15 }} spin />
