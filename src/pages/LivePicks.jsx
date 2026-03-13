@@ -14,7 +14,7 @@ const { Text } = Typography;
 const TENSION_SOUND_URL = "https://assets.mixkit.co/active_storage/sfx/209/209-preview.mp3"; 
 const FANFARE_SOUND_URL = "https://assets.mixkit.co/active_storage/sfx/2019/2019-preview.mp3";
 
-// --- ✨ 애니메이션 (깜빡임 유지) ---
+// --- ✨ 애니메이션 ---
 const pulseGold = keyframes`
   0% { box-shadow: 0 0 0 0 rgba(212, 175, 55, 0.4); border-color: #d4af37; }
   70% { box-shadow: 0 0 0 10px rgba(212, 175, 55, 0); border-color: #ffd700; }
@@ -76,7 +76,6 @@ const SoundToggleBtn = styled.button`
   &:hover {
     background: ${props => props.active ? 'rgba(16, 185, 129, 0.4)' : 'rgba(239, 68, 68, 0.4)'};
   }
-  animation: ${props => !props.active ? pulseRed : 'none'} 2s infinite;
 `;
 
 const HistoryPanel = styled.div`
@@ -132,13 +131,11 @@ const GameCard = styled.div`
     background: linear-gradient(145deg, #1f2937 0%, #292524 100%);
   }
   
-  /* 진입 임박 시 깜빡임 유지 */
   &.imminent {
     animation: ${pulseGold} 1.5s infinite;
     border-width: 2px;
   }
 
-  /* 배팅 시 깜빡임 유지 */
   &.betting {
     border-color: #ef4444;
     animation: ${pulseRed} 1.5s infinite;
@@ -146,9 +143,10 @@ const GameCard = styled.div`
   }
 `;
 
-// [수정] 폰트 크기 및 스타일 조정
+// 🔥 [중요] CountBox, CountNumber 스타일을 삭제했습니다! (에러 원인 제거)
+
 const PickDisplay = styled.div`
-  font-size: 42px; /* 폰트 더 키움 */
+  font-size: 42px; 
   font-weight: 900;
   letter-spacing: -1px;
   text-align: center;
@@ -187,13 +185,13 @@ const DarkTable = styled(Table)`
   .ant-pagination-item-active { border-color: #d4af37 !important; a { color: #d4af37 !important; } }
 `;
 
-// [중요] 내용을 수직/수평 중앙 정렬해주는 컨테이너
+// 내용 중앙 정렬 래퍼
 const CenterContent = styled.div`
-  flex: 1; /* 남은 공간을 모두 차지 */
+  flex: 1; 
   display: flex;
   flex-direction: column;
-  justify-content: center; /* 수직 중앙 */
-  align-items: center; /* 수평 중앙 */
+  justify-content: center; 
+  align-items: center; 
   width: 100%;
 `;
 
@@ -266,7 +264,6 @@ const LivePicks = () => {
       const betting = roomData.filter(r => r.phase === 'BETTING' && r.step >= userEntryLevel);
       const idle = roomData.length - waiting.length - betting.length;
       
-      // 이름순 정렬
       waiting.sort((a, b) => a.room_name.localeCompare(b.room_name));
       betting.sort((a, b) => b.step - a.step);
 
@@ -332,7 +329,6 @@ const LivePicks = () => {
 
   return (
     <Container>
-      
       <HeaderContainer>
         <DashboardTitle>WHALEBET DASHBOARD</DashboardTitle>
         <SoundToggleBtn onClick={toggleSound} active={isSoundEnabled}>
@@ -342,7 +338,6 @@ const LivePicks = () => {
       </HeaderContainer>
 
       <HistoryPanel>
-        {/* 통계 부분 유지 */}
         <div style={{textAlign:'center'}}>
             <div style={{color:'#9ca3af', marginBottom: 5, fontSize:12}}>TOTAL WIN RATE</div>
             <Progress type="circle" percent={stats.winRate} width={80} strokeColor="#10b981" trailColor="#374151" format={percent => <span style={{color:'white', fontWeight:'bold'}}>{percent}%</span>} />
@@ -381,12 +376,10 @@ const LivePicks = () => {
                                     {room.room_name}
                                 </div>
 
-                                {/* 중앙 정렬 영역 */}
                                 <CenterContent>
                                     {isCountdown ? (
                                         <div style={{textAlign:'center'}}>
-                                            {/* 🔥 숫자 박스(Checking 3 2 1) 제거됨 */}
-                                            {/* 대신 경고 문구 추가 */}
+                                            {/* 박스 없이 텍스트만 표시 */}
                                             <Text style={{color:'#fbbf24', fontSize:14, fontWeight:'bold', letterSpacing:1}}>
                                                 ⚠️ 진입 임박 ({remaining}판 전)
                                             </Text>
@@ -446,7 +439,6 @@ const LivePicks = () => {
                             {room.room_name}
                         </div>
 
-                        {/* 🔥 완벽한 중앙 정렬 (flex: 1) */}
                         <CenterContent>
                             <div style={{textAlign:'center'}}>
                                 <div style={{fontSize:11, color:'#ef4444', marginBottom: 10, letterSpacing:1}}>
