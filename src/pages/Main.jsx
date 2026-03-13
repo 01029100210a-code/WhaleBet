@@ -1,13 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Layout, Menu, Button, Modal, Tag } from 'antd';
+import { Layout, Menu, Button, Modal, Tag, Typography } from 'antd';
 import { 
-  DesktopOutlined, 
-  GiftOutlined, 
-  LogoutOutlined, 
-  CrownOutlined, 
-  SettingOutlined, 
-  UserOutlined, 
-  LockOutlined 
+  DesktopOutlined, GiftOutlined, LogoutOutlined, CrownOutlined, 
+  SettingOutlined, UserOutlined, LockOutlined, SoundOutlined, CustomerServiceOutlined 
 } from '@ant-design/icons';
 import { doc, onSnapshot, updateDoc, Timestamp } from "firebase/firestore";
 import { db } from '../firebase'; 
@@ -19,9 +14,14 @@ import axios from 'axios';
 import LivePicks from './LivePicks'; 
 import RouletteGame from './RouletteGame';
 import MyPage from './MyPage';
-import Settings from './Settings'; // 🔥 [추가] 전략 설정 페이지 연결
+import Settings from './Settings'; 
+import Admin from './Admin';
+import Notice from './Notice'; // 🔥 [NEW] 공지사항 추가
 
 const { Header, Content, Sider } = Layout;
+
+// 텔레그램 문의 주소
+const TELEGRAM_CS_URL = "https://t.me/y99887766y";
 
 // 스타일 정의
 const DarkLayout = styled(Layout)`
@@ -110,11 +110,8 @@ const Main = () => {
   // 이용권 유효성 검사 함수
   const isSubscriptionValid = () => {
       if (!userData) return false;
-      // 관리자 등급은 무제한
       if (adminRoles.includes(userData.role)) return true; 
-      
       if (!userData.expiryDate) return false;
-      
       const expiry = userData.expiryDate.toDate ? userData.expiryDate.toDate() : new Date(userData.expiryDate);
       return expiry > new Date();
   };
@@ -122,19 +119,12 @@ const Main = () => {
   // 남은 시간 표시 함수
   const getRemainingTime = () => {
       if (!userData?.expiryDate) return "만료됨";
-      
       const expiry = userData.expiryDate.toDate ? userData.expiryDate.toDate() : new Date(userData.expiryDate);
       if (expiry < new Date()) return "만료됨";
-      
       const diff = expiry - new Date();
       const days = Math.floor(diff / (1000 * 60 * 60 * 24));
       const hours = Math.floor((diff / (1000 * 60 * 60)) % 24);
       return `${days}일 ${hours}시간 남음`;
-  };
-
-  // 관리자 페이지 이동
-  const handleAdminClick = () => {
-      navigate('/admin');
   };
 
   return (
@@ -150,24 +140,31 @@ const Main = () => {
             mode="inline" 
             selectedKeys={[selectedKey]}
             onClick={(e) => {
-                if (e.key === 'admin') {
-                    handleAdminClick();
+                if (e.key === 'telegram_cs') {
+                    window.open(TELEGRAM_CS_URL, '_blank'); // 🔥 관리자 문의 새창 열기
                 } else {
                     setSelectedKey(e.key);
                 }
             }}
         >
+          {/* 주요 메뉴 */}
           <Menu.Item key="1" icon={<DesktopOutlined />}>실시간 픽 (Live)</Menu.Item>
+          <Menu.Item key="notice" icon={<SoundOutlined style={{color:'#f59e0b'}} />}>공지사항</Menu.Item> {/* 🔥 공지사항 추가 */}
           <Menu.Item key="2" icon={<GiftOutlined />}>룰렛 게임 (Event)</Menu.Item>
           <Menu.Item key="3" icon={<SettingOutlined />}>전략 설정</Menu.Item>
           <Menu.Item key="4" icon={<UserOutlined />}>마이페이지</Menu.Item>
 
-          {/* 관리자 메뉴 (하단 분리) */}
+          {/* 고객센터 (텔레그램 자동연결) */}
+          <Menu.Item key="telegram_cs" icon={<CustomerServiceOutlined style={{color: '#3b82f6'}} />}>
+             <span style={{color:'#3b82f6', fontWeight:'bold'}}>관리자 문의 (텔레그램)</span>
+          </Menu.Item>
+
+          {/* 관리자 메뉴 (권한 있을때만 하단 노출) */}
           {userData && adminRoles.includes(userData.role) && (
             <Menu.Item 
                 key="admin" 
                 icon={<CrownOutlined style={{color: '#d4af37'}} />} 
-                style={{marginTop: 50, color: '#d4af37', fontWeight:'bold'}}
+                style={{marginTop: 30, color: '#d4af37', fontWeight:'bold'}}
             >
               관리자 페이지
             </Menu.Item>
@@ -206,14 +203,20 @@ const Main = () => {
               )
           )}
 
-          {/* 2. 룰렛 게임 */}
+          {/* 2. 공지사항 (🔥 추가됨) */}
+          {selectedKey === 'notice' && <Notice user={userData} />}
+
+          {/* 3. 룰렛 게임 */}
           {selectedKey === '2' && <RouletteGame user={userData} />}
 
-          {/* 3. 전략 설정 (🔥 수정됨) */}
+          {/* 4. 전략 설정 */}
           {selectedKey === '3' && <Settings />}
 
-          {/* 4. 마이페이지 */}
+          {/* 5. 마이페이지 */}
           {selectedKey === '4' && <MyPage user={userData} />}
+
+          {/* 6. 관리자 페이지 */}
+          {selectedKey === 'admin' && <Admin />}
         </Content>
       </Layout>
     </DarkLayout>
