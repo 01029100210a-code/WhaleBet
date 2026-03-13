@@ -132,7 +132,6 @@ const GameCard = styled.div`
     background: linear-gradient(145deg, #1f2937 0%, #292524 100%);
   }
   
-  /* 진입 임박 시 깜빡임 */
   &.imminent {
     animation: ${pulseGold} 1.5s infinite;
     border-width: 2px;
@@ -145,7 +144,6 @@ const GameCard = styled.div`
   }
 `;
 
-// [NEW] 카운트다운 박스 스타일 (고정된 디자인)
 const CountBox = styled.div`
   border: 1px solid #d4af37;
   background: rgba(212, 175, 55, 0.05);
@@ -264,13 +262,20 @@ const LivePicks = () => {
     };
   }, [bettingRooms.length, isSoundEnabled]);
 
+  // Firestore Snapshot (Rooms)
   useEffect(() => {
-    const q = query(collection(db, "rooms"), orderBy("updated_at", "desc"));
+    // 🔥 [수정] 정렬 없이 가져옴 (이름순 정렬을 위해)
+    const q = query(collection(db, "rooms"));
+    
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const roomData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      
       const waiting = roomData.filter(r => r.phase === 'WAITING');
       const betting = roomData.filter(r => r.phase === 'BETTING' && r.step >= userEntryLevel);
       const idle = roomData.length - waiting.length - betting.length;
+      
+      // 🔥 [수정] 화면 흔들림 방지를 위해 '이름순(가나다)' 고정 정렬
+      waiting.sort((a, b) => a.room_name.localeCompare(b.room_name));
       
       betting.sort((a, b) => b.step - a.step);
 
@@ -282,6 +287,7 @@ const LivePicks = () => {
     return () => unsubscribe();
   }, [userEntryLevel]);
 
+  // History & Stats
   useEffect(() => {
     const q = query(collection(db, "game_history"), orderBy("created_at", "desc"), limit(100));
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -337,7 +343,6 @@ const LivePicks = () => {
   return (
     <Container>
       
-      {/* 🔹 헤더 */}
       <HeaderContainer>
         <DashboardTitle>WHALEBET DASHBOARD</DashboardTitle>
         <SoundToggleBtn onClick={toggleSound} active={isSoundEnabled}>
@@ -346,7 +351,6 @@ const LivePicks = () => {
         </SoundToggleBtn>
       </HeaderContainer>
 
-      {/* 1. 통계 */}
       <HistoryPanel>
         <div style={{textAlign:'center'}}>
             <div style={{color:'#9ca3af', marginBottom: 5, fontSize:12}}>TOTAL WIN RATE</div>
@@ -364,7 +368,6 @@ const LivePicks = () => {
         </div>
       </HistoryPanel>
 
-      {/* 2. 🔥 Waiting Zone (수정됨: 슬라이더 완전 제거) */}
       <div style={{marginBottom: 30}}>
           <SectionTitle className="gold">
             <ThunderboltOutlined className="icon" />
@@ -376,9 +379,8 @@ const LivePicks = () => {
           ) : (
             <Row gutter={[20, 20]} justify="center">
                 {waitingRooms.map((room) => {
-                    // 남은 횟수 체크 (없으면 기본값 10)
                     const remaining = room.remaining !== undefined ? room.remaining : 10;
-                    const isCountdown = remaining <= 3; // 3판 이하일 때만 카운트다운
+                    const isCountdown = remaining <= 3; 
 
                     return (
                         <Col xs={24} sm={12} md={8} lg={6} xl={6} key={room.id}>
@@ -387,9 +389,7 @@ const LivePicks = () => {
                                     {room.room_name}
                                 </div>
 
-                                {/* [조건부 렌더링] 3판 이하일 때 vs 아닐 때 */}
                                 {isCountdown ? (
-                                    // 3, 2, 1 카운트다운 화면 (슬라이드 아님!)
                                     <div style={{textAlign:'center'}}>
                                         <CountBox>
                                             <Text style={{color:'#9ca3af', fontSize:10, letterSpacing:2}}>CHECKING</Text>
@@ -403,7 +403,6 @@ const LivePicks = () => {
                                         </div>
                                     </div>
                                 ) : (
-                                    // 일반 분석중 화면 (Deep Learning Scan)
                                     <div style={{textAlign:'center', padding: '20px 0'}}>
                                         <ScanOutlined spin style={{ fontSize: 40, color: '#4b5563', marginBottom: 15 }} />
                                         <Text style={{ display: 'block', color: '#6b7280', fontSize: 14, fontWeight: 'bold' }}>
@@ -433,7 +432,6 @@ const LivePicks = () => {
           )}
       </div>
 
-      {/* 3. 진행 (Betting) - 유지 */}
       <div style={{marginBottom: 30}}>
           <SectionTitle className="red">
             <FireOutlined className="icon" />
@@ -464,7 +462,6 @@ const LivePicks = () => {
           )}
       </div>
 
-      {/* 4. 히스토리 & 5. AI Scan */}
       <div style={{marginBottom: 30, background: '#111827', padding: 20, borderRadius: 16, border: '1px solid #374151'}}>
         <h3 style={{color:'white', marginBottom: 15}}><HistoryOutlined /> Recent Results</h3>
         <DarkTable 
