@@ -16,16 +16,18 @@ import bcrypt from 'bcryptjs';
 
 const { Option } = Select;
 
-// --- 스타일 (기존 유지) ---
+// --- 스타일 ---
 const AdminLayout = styled(Layout)` background: #111827; min-height: 100vh; padding: 20px; color: white; `;
 const StyledTable = styled(Table)` .ant-table { background: transparent; color: #e5e7eb; } .ant-table-thead > tr > th { background: #1f2937 !important; color: #9ca3af !important; border-bottom: 1px solid #374151 !important; font-size: 12px; } .ant-table-tbody > tr > td { border-bottom: 1px solid #1f2937 !important; color: #e5e7eb !important; } .ant-table-tbody > tr:hover > td { background: #374151 !important; } .ant-pagination-item-link, .ant-pagination-item { background: transparent !important; border-color: #374151 !important; a { color: #9ca3af !important; } } .ant-pagination-item-active { border-color: #10b981 !important; a { color: #10b981 !important; } } `;
 const StatsCard = styled(Card)` background: #1f2937; border: 1px solid #374151; border-radius: 8px; .ant-statistic-title { color: #9ca3af; } .ant-statistic-content { color: white; font-weight: bold; } `;
 
 const Admin = () => {
-  const [users, setUsers] = useState([]);
+  const [allUsers, setAllUsers] = useState([]); 
+  const [filteredUsers, setFilteredUsers] = useState([]);
   const [coupons, setCoupons] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [currentUserRole, setCurrentUserRole] = useState(''); // 현재 로그인한 관리자 등급
+  
+  const [adminInfo, setAdminInfo] = useState({ role: '', code: '' });
 
   const [isUserModalVisible, setIsUserModalVisible] = useState(false);
   const [isCouponModalVisible, setIsCouponModalVisible] = useState(false);
@@ -34,27 +36,24 @@ const Admin = () => {
   const [couponForm] = Form.useForm();
   const [searchText, setSearchText] = useState('');
 
-  // --- 현재 접속자 등급 확인 ---
+  // 1. 관리자 정보 로드
   useEffect(() => {
       const myUsername = localStorage.getItem('username');
       if (myUsername) {
           getDoc(doc(db, "users", myUsername)).then(snap => {
-              if (snap.exists()) setCurrentUserRole(snap.data().role);
+              if (snap.exists()) {
+                  const data = snap.data();
+                  setAdminInfo({ role: data.role, code: data.referralCode });
+              }
           });
       }
   }, []);
 
-  // --- 데이터 로드 ---
+  // 2. 전체 데이터 로드
   useEffect(() => {
     const unsubUsers = onSnapshot(collection(db, "users"), (snapshot) => {
       const usersData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      usersData.sort((a, b) => {
-          if (a.isApproved === false && b.isApproved !== false) return -1;
-          if (b.isApproved === false && a.isApproved !== false) return 1;
-          const aOnline = !!a.currentSessionId; const bOnline = !!b.currentSessionId;
-          return Number(bOnline) - Number(aOnline);
-      });
-      setUsers(usersData);
+      setAllUsers(usersData);
       setLoading(false);
     });
     const unsubCoupons = onSnapshot(collection(db, "coupons"), (snapshot) => {
@@ -65,12 +64,34 @@ const Admin = () => {
     return () => { unsubUsers(); unsubCoupons(); };
   }, []);
 
-  // --- 유저 생성/수정 ---
+  // 3. 권한별 필터링 (하부 유저만 보기)
+  useEffect(() => {
+      if (!adminInfo.role) return;
+
+      let result = [];
+      if (adminInfo.role === 'super_admin') {
+          result = allUsers;
+      } else {
+          // 총판/매장: 내 코드와 같고, role이 user인 사람만
+          result = allUsers.filter(u => u.referralCode === adminInfo.code && u.role === 'user');
+      }
+
+      // 정렬: 승인대기 > 접속중 > 나머지
+      result.sort((a, b) => {
+          if (a.isApproved === false && b.isApproved !== false) return -1;
+          if (b.isApproved === false && a.isApproved !== false) return 1;
+          const aOnline = !!a.currentSessionId; const bOnline = !!b.currentSessionId;
+          return Number(bOnline) - Number(aOnline);
+      });
+
+      setFilteredUsers(result);
+  }, [allUsers, adminInfo]);
+
+  // --- 기능 함수들 ---
   const handleUserOk = async () => {
     try {
       const values = await form.validateFields();
       const userData = { ...values, expiryDate: values.expiryDate ? values.expiryDate.toDate() : null };
-      
       if (editingUser) {
         if (values.password) {
             const salt = bcrypt.genSaltSync(10);
@@ -98,7 +119,7 @@ const Admin = () => {
   };
   const approveUser = async (user) => { await updateDoc(doc(db, "users", user.id), { isApproved: true }); message.success('승인 완료'); };
   const extendTime = async (id, days) => {
-    const user = users.find(u => u.id === id);
+    const user = allUsers.find(u => u.id === id);
     let currentExpiry = user.expiryDate ? user.expiryDate.toDate() : new Date();
     if (currentExpiry < new Date()) currentExpiry = new Date();
     const newExpiry = new Date(currentExpiry.getTime() + days * 24 * 60 * 60 * 1000);
@@ -120,10 +141,14 @@ const Admin = () => {
   };
   const handleDeleteCoupon = async (id) => { await deleteDoc(doc(db, "coupons", id)); message.success("삭제됨"); };
 
+  // 최고 관리자 여부 확인
+  const isSuper = adminInfo.role === 'super_admin';
+
   const userColumns = [
     {
       title: '유저정보', width: 200, filteredValue: [searchText], onFilter: (val, rec) => String(rec.id).toLowerCase().includes(val.toLowerCase()),
       render: (_, r) => {
+          // 🔥 [기능 유지] 접속 상태(ON/OFF) - 총판도 확인 가능
           const isOnline = !!r.currentSessionId;
           return (
             <div>
@@ -132,10 +157,7 @@ const Admin = () => {
                     <Tag icon={isOnline ? <WifiOutlined /> : <PoweroffOutlined />} color={isOnline ? "success" : "default"}>{isOnline ? "ON" : "OFF"}</Tag>
                 </div>
                 <div style={{fontSize: 11, color: '#d1d5db', marginBottom:2}}>{r.name || '-'} / {r.phone || '-'}</div>
-                {/* 🔥 코드가 있으면 노란색으로 강조 */}
-                <div style={{fontSize: 11, color: r.referralCode ? '#f59e0b' : '#4b5563', fontWeight: r.referralCode ? 'bold' : 'normal'}}>
-                    코드: {r.referralCode || '없음'}
-                </div>
+                <div style={{fontSize: 11, color: r.referralCode ? '#f59e0b' : '#4b5563'}}>코드: {r.referralCode || '없음'}</div>
             </div>
           );
       }
@@ -144,6 +166,7 @@ const Admin = () => {
       title: '접속/상태',
       render: (_, r) => (
           <div style={{fontSize: 12}}>
+              {/* 🔥 [기능 유지] IP 및 접속 시간 - 총판도 확인 가능 */}
               <div style={{color: '#e5e7eb'}}><WifiOutlined style={{marginRight: 5, color: '#10b981'}} /> IP: {r.ipAddress || '-'}</div>
               <div style={{color: '#9ca3af', marginTop: 2}}>Last: {r.lastLogout ? dayjs(r.lastLogout.toDate()).format('MM-DD HH:mm') : '-'}</div>
               {r.isApproved === false ? <Tag color="volcano" style={{marginTop: 4, fontWeight:'bold', animation:'pulse 1s infinite'}}>⏳ 승인 대기중</Tag> : (r.isBlocked && <Tag color="red" style={{marginTop:4}}>🚫 접속차단</Tag>)}
@@ -171,7 +194,8 @@ const Admin = () => {
             </div>
             <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', fontSize:11}}>
                 <span style={{color:'#f59e0b'}}><ThunderboltOutlined /> {r.strategyLevel || 1}단계</span>
-                <Switch size="small" checked={!r.isTelegramBlocked} onChange={() => toggleTelegramBlock(r)} />
+                {/* 🔥 차단 스위치는 슈퍼관리자만 보임 (총판은 확인만 가능) */}
+                <Switch size="small" checked={!r.isTelegramBlocked} onChange={() => toggleTelegramBlock(r)} disabled={!isSuper} />
             </div>
           </div>
         );
@@ -180,56 +204,77 @@ const Admin = () => {
     {
       title: '관리', render: (_, r) => (
         <div style={{display:'flex', gap: 5, flexWrap:'wrap'}}>
+            {/* 가입 승인 (누구나 가능 - 자기 하부니까) */}
             {r.isApproved === false && ( <Button type="primary" size="small" style={{background:'#10b981', borderColor:'#10b981', width:'100%', marginBottom: 5}} onClick={() => approveUser(r)}>가입 승인</Button> )}
-            <Button size="small" icon={<EditOutlined />} onClick={() => { setEditingUser(r); form.setFieldsValue({ ...r, password: '', expiryDate: r.expiryDate ? dayjs(r.expiryDate.toDate()) : null }); setIsUserModalVisible(true); }} />
-            <Button size="small" type="primary" onClick={() => extendTime(r.id, 30)}>+30일</Button>
-            <Tooltip title={r.isBlocked ? "차단 해제" : "접속 차단"}>
-                <Button size="small" style={{background: r.isBlocked ? '#10b981' : '#f59e0b', border:'none', color:'white'}} icon={r.isBlocked ? <UnlockOutlined /> : <LockOutlined />} onClick={() => toggleUserBlock(r)} />
-            </Tooltip>
-            <Popconfirm title="삭제?" onConfirm={() => handleDeleteUser(r.id)}><Button size="small" danger icon={<DeleteOutlined />} /></Popconfirm>
+            
+            {/* 🔥 슈퍼관리자 전용 기능 */}
+            {isSuper && (
+                <>
+                    <Button size="small" icon={<EditOutlined />} onClick={() => { setEditingUser(r); form.setFieldsValue({ ...r, password: '', expiryDate: r.expiryDate ? dayjs(r.expiryDate.toDate()) : null }); setIsUserModalVisible(true); }} />
+                    <Button size="small" type="primary" onClick={() => extendTime(r.id, 30)}>+30일</Button>
+                    <Tooltip title={r.isBlocked ? "차단 해제" : "접속 차단"}>
+                        <Button size="small" style={{background: r.isBlocked ? '#10b981' : '#f59e0b', border:'none', color:'white'}} icon={r.isBlocked ? <UnlockOutlined /> : <LockOutlined />} onClick={() => toggleUserBlock(r)} />
+                    </Tooltip>
+                    <Popconfirm title="삭제?" onConfirm={() => handleDeleteUser(r.id)}><Button size="small" danger icon={<DeleteOutlined />} /></Popconfirm>
+                </>
+            )}
+            
+            {/* 🔥 총판/매장은 연장 버튼만 */}
+            {!isSuper && (
+                 <Button size="small" type="primary" onClick={() => extendTime(r.id, 30)}>+30일 연장</Button>
+            )}
         </div>
       )
     }
   ];
 
   const couponColumns = [ { title: '코드', dataIndex: 'code', render: t => <Tag color="cyan">{t}</Tag> }, { title: '기간', dataIndex: 'days', render: d => <b>{d}일</b> }, { title: '상태', render: (_, r) => r.isUsed ? <Tag color="red">사용됨</Tag> : <Tag color="green">가능</Tag> }, { title: '삭제', render: (_, r) => <Button danger size="small" onClick={() => handleDeleteCoupon(r.id)} icon={<DeleteOutlined />} /> } ];
-  const pendingUsers = users.filter(u => u.isApproved === false).length;
+  
+  // 통계 (필터링된 유저 기준)
+  const pendingUsers = filteredUsers.filter(u => u.isApproved === false).length;
+  const onlineUsers = filteredUsers.filter(u => !!u.currentSessionId).length;
 
   return (
     <AdminLayout>
         <div style={{display:'flex', justifyContent:'space-between', marginBottom: 20}}>
-            <h1 style={{color:'white', margin:0}}>ADMIN CONSOLE</h1>
+            <h1 style={{color:'white', margin:0}}>
+                ADMIN CONSOLE 
+                <Tag color={isSuper ? "gold" : "cyan"} style={{marginLeft: 10, fontSize: 12}}>
+                    {isSuper ? "SUPER ADMIN" : "PARTNER"}
+                </Tag>
+            </h1>
             <div style={{display:'flex', gap: 10}}>
-                <Button icon={<BarcodeOutlined />} onClick={() => setIsCouponModalVisible(true)} size="large" style={{background:'#0f766e', color:'white', border:'none'}}>쿠폰 관리</Button>
-                <Button type="primary" icon={<UserAddOutlined />} onClick={() => { setEditingUser(null); form.resetFields(); setIsUserModalVisible(true); }} size="large">신규 유저</Button>
+                {isSuper && (
+                    <>
+                        <Button icon={<BarcodeOutlined />} onClick={() => setIsCouponModalVisible(true)} size="large" style={{background:'#0f766e', color:'white', border:'none'}}>쿠폰 관리</Button>
+                        <Button type="primary" icon={<UserAddOutlined />} onClick={() => { setEditingUser(null); form.resetFields(); setIsUserModalVisible(true); }} size="large">신규 유저</Button>
+                    </>
+                )}
             </div>
         </div>
         <Row gutter={16} style={{marginBottom: 24}}>
-            <Col span={6}><StatsCard><Statistic title="총 회원" value={users.length} prefix={<UserAddOutlined />} /></StatsCard></Col>
+            <Col span={6}><StatsCard><Statistic title="내 하부 회원" value={filteredUsers.length} prefix={<UserAddOutlined />} /></StatsCard></Col>
             <Col span={6}><StatsCard><Statistic title="가입 승인 대기" value={pendingUsers} valueStyle={{color: pendingUsers > 0 ? '#ef4444' : '#9ca3af'}} prefix={<CheckCircleOutlined />} /></StatsCard></Col>
-            <Col span={6}><StatsCard><Statistic title="텔레그램" value={users.filter(u=>u.isTelegramActive && !u.isTelegramBlocked).length} valueStyle={{color:'#3b82f6'}} prefix={<RobotOutlined />} /></StatsCard></Col>
-            <Col span={6}><StatsCard><Statistic title="쿠폰" value={coupons.filter(c=>!c.isUsed).length} valueStyle={{color:'#f59e0b'}} prefix={<BarcodeOutlined />} /></StatsCard></Col>
+            <Col span={6}><StatsCard><Statistic title="현재 접속자" value={onlineUsers} valueStyle={{color:'#10b981'}} prefix={<WifiOutlined />} /></StatsCard></Col>
+            {isSuper && <Col span={6}><StatsCard><Statistic title="미사용 쿠폰" value={coupons.filter(c=>!c.isUsed).length} valueStyle={{color:'#f59e0b'}} prefix={<BarcodeOutlined />} /></StatsCard></Col>}
         </Row>
+        
         <div style={{marginBottom: 16, display:'flex', justifyContent:'flex-end'}}>
             <Input placeholder="ID 검색..." prefix={<SearchOutlined />} onChange={e => setSearchText(e.target.value)} style={{width: 250, background:'#1f2937', border:'1px solid #374151', color:'white'}} />
         </div>
-        <StyledTable columns={userColumns} dataSource={users} rowKey="id" loading={loading} pagination={{ pageSize: 8 }} />
         
-        {/* 유저 모달 */}
+        <StyledTable columns={userColumns} dataSource={filteredUsers} rowKey="id" loading={loading} pagination={{ pageSize: 8 }} />
+        
         <Modal title={editingUser ? "정보 수정" : "신규 생성"} open={isUserModalVisible} onOk={handleUserOk} onCancel={() => setIsUserModalVisible(false)}>
             <Form form={form} layout="vertical">
                 <Form.Item name="username" label="아이디"><Input disabled={!!editingUser} /></Form.Item>
                 <Form.Item name="password" label="비밀번호"><Input.Password /></Form.Item>
                 <Form.Item name="role" label="등급" initialValue="user"><Select><Option value="user">회원</Option><Option value="store">매장</Option><Option value="distributor">총판</Option><Option value="admin">관리자</Option></Select></Form.Item>
                 <Form.Item name="expiryDate" label="만료일"><DatePicker showTime style={{width:'100%'}} /></Form.Item>
-                
-                {/* 🔥 [추가] 추천인 코드 (super_admin만 수정 가능) */}
-                <Form.Item name="referralCode" label="추천인 코드 (총판/매장용)" help="일반 유저가 가입할 때 입력하는 코드입니다.">
-                    <Input disabled={currentUserRole !== 'super_admin'} placeholder="ex) CODE123" />
-                </Form.Item>
+                <Form.Item name="referralCode" label="추천인 코드"><Input disabled={!isSuper} placeholder="총판에게 부여할 코드" /></Form.Item>
             </Form>
         </Modal>
-
+        
         <Modal title="쿠폰 관리" open={isCouponModalVisible} onCancel={() => setIsCouponModalVisible(false)} footer={null} width={700}>
             <div style={{display:'flex', gap:10, marginBottom: 20}}>
                 <Form form={couponForm} layout="inline" onFinish={handleCreateCoupon}>
