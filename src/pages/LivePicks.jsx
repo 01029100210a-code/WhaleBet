@@ -10,8 +10,7 @@ import { db } from '../firebase';
 
 const { Text } = Typography;
 
-// --- 🎵 사운드 파일 수정 ---
-// [변경] 기존 209번(웅장한 소리) -> 명확한 '삐-삐-' 경고음으로 변경 (Mixkit Alert)
+// --- 🎵 사운드 파일 ---
 const TENSION_SOUND_URL = "https://assets.mixkit.co/active_storage/sfx/995/995-preview.mp3"; 
 const FANFARE_SOUND_URL = "https://assets.mixkit.co/active_storage/sfx/2019/2019-preview.mp3";
 
@@ -260,7 +259,12 @@ const LivePicks = () => {
   const [isSoundEnabled, setIsSoundEnabled] = useState(false);
 
   const [stats, setStats] = useState({
-    totalScore: 0, totalGames: 0, winRate: 0, safeHitCount: 0, currentStreak: 0, history: []
+    totalScore: 0, 
+    totalGames: 0, 
+    winRate: 0, 
+    safeHitCount: 0, 
+    currentStreak: 0, 
+    history: []
   });
 
   const userEntryLevel = parseInt(localStorage.getItem('entryLevel')) || 1; 
@@ -272,19 +276,18 @@ const LivePicks = () => {
   // 오디오 초기화
   useEffect(() => {
     tensionAudioRef.current = new Audio(TENSION_SOUND_URL);
-    tensionAudioRef.current.volume = 0.6; // 적절한 볼륨
-    tensionAudioRef.current.preload = 'auto'; // 미리 로드
+    tensionAudioRef.current.volume = 0.6;
+    tensionAudioRef.current.preload = 'auto';
 
     fanfareAudioRef.current = new Audio(FANFARE_SOUND_URL);
     fanfareAudioRef.current.volume = 0.7;
     fanfareAudioRef.current.preload = 'auto';
   }, []);
 
-  // 사운드 토글 함수
+  // 사운드 토글
   const toggleSound = () => {
     if (isSoundEnabled) {
       setIsSoundEnabled(false);
-      // 소리 끄면 즉시 정지
       if (tensionAudioRef.current) {
         tensionAudioRef.current.pause();
         tensionAudioRef.current.currentTime = 0;
@@ -295,7 +298,6 @@ const LivePicks = () => {
       }
     } else {
       setIsSoundEnabled(true);
-      // 브라우저 정책 우회를 위해 짧게 재생 후 정지
       const unlockAudio = async () => {
         try {
           if (tensionAudioRef.current) {
@@ -309,54 +311,41 @@ const LivePicks = () => {
               fanfareAudioRef.current.currentTime = 0;
           }
         } catch (e) {
-          console.warn("Audio unlock failed (user interaction needed):", e);
+          console.warn("Audio unlock failed:", e);
         }
       };
       unlockAudio();
     }
   };
 
-  // 배팅 중인지 여부 (안정적인 boolean 값)
   const hasActiveBetting = bettingRooms.length > 0;
 
-  // 🔥 [핵심 수정] 배팅 알림음 루프 로직
+  // 배팅 알림음 루프
   useEffect(() => {
     let intervalId = null;
-
     if (isSoundEnabled && hasActiveBetting) {
       const playBeep = async () => {
         const audio = tensionAudioRef.current;
         if (!audio) return;
-
         try {
-            // 소리가 겹치지 않도록 초기화 후 재생
             audio.currentTime = 0;
             await audio.play();
         } catch (e) {
             console.error("Beep sound error:", e);
         }
       };
-
-      // 1. 즉시 한 번 재생
       playBeep();
-
-      // 2. 2초 간격으로 반복 재생 (새로운 알람 소리에 맞춰 2초 설정)
       intervalId = setInterval(playBeep, 2000);
-
     } else {
-      // 배팅이 끝나거나 소리를 끄면 정지
       if (tensionAudioRef.current) {
         tensionAudioRef.current.pause();
         tensionAudioRef.current.currentTime = 0;
       }
     }
+    return () => { if (intervalId) clearInterval(intervalId); };
+  }, [isSoundEnabled, hasActiveBetting]); 
 
-    return () => {
-      if (intervalId) clearInterval(intervalId);
-    };
-  }, [isSoundEnabled, hasActiveBetting]); // bettingRooms 자체가 바뀌어도 hasActiveBetting 값만 같으면 불필요하게 재시작 안 함
-
-  // Firestore Listeners
+  // 실시간 룸 데이터
   useEffect(() => {
     const q = query(collection(db, "rooms")); 
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -376,17 +365,18 @@ const LivePicks = () => {
     return () => unsubscribe();
   }, [userEntryLevel]);
 
-  // 승리 사운드 및 히스토리
+  // 🔥 [통계 집계 로직 수정] 00시 초기화 및 단계별 집계 정확도 향상
   useEffect(() => {
-    const q = query(collection(db, "game_history"), orderBy("created_at", "desc"), limit(100));
+    // 하루치 데이터를 충분히 가져오기 위해 limit 증가 (100 -> 500)
+    const q = query(collection(db, "game_history"), orderBy("created_at", "desc"), limit(500));
+    
     const unsubscribe = onSnapshot(q, (snapshot) => {
+      // 1. 승리 사운드 처리 (첫 로드 제외)
       if (!isFirstLoad.current) {
         snapshot.docChanges().forEach((change) => {
           if (change.type === "added") {
             const data = change.doc.data();
-            // 승리 시 팡파레
             if (isSoundEnabled && data.result === 'WIN' && fanfareAudioRef.current) {
-                // 배팅 소리와 겹칠 수 있으므로 배팅 소리 잠시 줄이거나 멈출 수도 있지만, 여기선 그냥 재생
                 fanfareAudioRef.current.currentTime = 0;
                 fanfareAudioRef.current.play().catch(() => {});
             }
@@ -395,25 +385,68 @@ const LivePicks = () => {
       } else {
         isFirstLoad.current = false;
       }
+
+      // 2. 데이터 가공
       const historyData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      let winCount = 0, totalStepScore = 0, safeHitCount = 0;
-      historyData.forEach(item => {
-          if (item.result === 'WIN') {
-              winCount++; totalStepScore += item.step; 
-              if (item.step <= 4) safeHitCount++; 
-          }
+
+      // --- 📌 [집계 로직 시작] ---
+      
+      // A. 오늘 날짜(00:00:00) 기준 설정
+      const now = new Date();
+      const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+
+      // B. 오늘 데이터만 필터링 (timestamp -> milliseconds 변환)
+      const todayData = historyData.filter(item => {
+          if (!item.created_at) return false;
+          const itemTime = item.created_at.seconds * 1000;
+          return itemTime >= startOfDay;
       });
-      let streak = 0;
-      for (let i = 0; i < historyData.length; i++) {
-          if (historyData[i].result === 'WIN' && historyData[i].step <= 4) streak++;
-          else break;
+
+      // C. TOTAL WINS (점수): 오늘 승리한 모든 단계의 합 (예: 4단계 승리 시 +4)
+      const totalScoreToday = todayData.reduce((sum, item) => {
+          return item.result === 'WIN' ? sum + item.step : sum;
+      }, 0);
+
+      // D. TOTAL WIN RATE (확률): 오늘 전체 게임 중 승리 비율
+      const totalGamesToday = todayData.length;
+      const winCountToday = todayData.filter(item => item.result === 'WIN').length;
+      const winRateToday = totalGamesToday === 0 ? 0 : Math.round((winCountToday / totalGamesToday) * 100);
+
+      // E. STREAK (1~4단계 성공 연승): 최신순 탐색, 패배시 중단
+      let currentStreak = 0;
+      for (let item of historyData) { // 전체 기록에서 탐색 (어제부터 이어질 수 있다면 historyData 사용, 오늘만이면 todayData 사용)
+          if (item.result !== 'WIN') break; // 패배시 끊김
+          if (item.step <= 4) {
+              currentStreak++;
+          } else {
+              // 4단계 초과(5,6단계) 승리 시 연승 유지할지, 끊을지? 보통 별개로 취급하므로 여기선 끊는 로직 적용 (요청사항 맥락상)
+              break; 
+          }
       }
+
+      // F. SAFETY HIT (3~6단계 성공 연승, 1~2단계 무시): 최신순 탐색
+      let safetyHitCount = 0;
+      for (let item of historyData) {
+          if (item.result !== 'WIN') break; // 패배 시 즉시 초기화 (연승 끊김)
+          
+          if (item.step >= 3 && item.step <= 6) {
+              // 3~6단계 승리면 카운트 증가
+              safetyHitCount++;
+          }
+          // 1, 2단계 승리는 무시 (continue): 연승을 끊지도 않고, 카운트를 올리지도 않음
+      }
+
+      // 3. 상태 업데이트
       setStats({
-        totalScore: totalStepScore, totalGames: historyData.length,
-        winRate: historyData.length > 0 ? Math.round((winCount / historyData.length) * 100) : 0,
-        safeHitCount, currentStreak: streak, history: historyData
+        totalScore: totalScoreToday,
+        totalGames: totalGamesToday,
+        winRate: winRateToday,
+        safeHitCount: safetyHitCount,
+        currentStreak: currentStreak,
+        history: historyData // 테이블에는 전체(어제 기록 포함) 보여줘도 됨
       });
     });
+
     return () => unsubscribe();
   }, [isSoundEnabled]);
 
@@ -428,7 +461,7 @@ const LivePicks = () => {
         align: 'center', 
         render: (res) => (
             <span style={{
-                color: res === 'WIN' ? '#39ff14' : '#ff4d4f',
+                color: res === 'WIN' ? '#39ff14' : '#ff4d4f', // 형광 녹색
                 fontWeight: '900',
                 textShadow: res === 'WIN' ? '0 0 10px rgba(57, 255, 20, 0.4)' : 'none',
                 fontSize: '14px'
