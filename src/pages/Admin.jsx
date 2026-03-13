@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Table, Layout, Button, Input, Modal, Form, DatePicker, 
-  Select, Tag, message, Popconfirm, Card, Row, Col, Statistic, Switch, Tooltip, Tabs
+  Select, Tag, message, Popconfirm, Card, Row, Col, Statistic, Switch, Tooltip
 } from 'antd';
 import { 
   SearchOutlined, UserAddOutlined, DeleteOutlined, 
   EditOutlined, RobotOutlined, StopOutlined, CheckCircleOutlined, 
-  ThunderboltOutlined, WifiOutlined, BarcodeOutlined, LockOutlined, UnlockOutlined 
+  ThunderboltOutlined, WifiOutlined, BarcodeOutlined, LockOutlined, UnlockOutlined, PoweroffOutlined
 } from '@ant-design/icons';
 import { collection, onSnapshot, doc, updateDoc, deleteDoc, setDoc, addDoc, Timestamp } from "firebase/firestore";
 import { db } from '../firebase';
@@ -59,8 +59,15 @@ const Admin = () => {
     // 1. 유저 데이터
     const unsubUsers = onSnapshot(collection(db, "users"), (snapshot) => {
       const usersData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      // 관리자 등급 우선 정렬
-      usersData.sort((a, b) => (b.role === 'super_admin') - (a.role === 'super_admin'));
+      // 정렬: 최고관리자 > 접속중 > 나머지
+      usersData.sort((a, b) => {
+          if (a.role === 'super_admin') return -1;
+          if (b.role === 'super_admin') return 1;
+          // 접속중인 유저를 위로
+          const aOnline = !!a.currentSessionId;
+          const bOnline = !!b.currentSessionId;
+          return Number(bOnline) - Number(aOnline);
+      });
       setUsers(usersData);
       setLoading(false);
     });
@@ -68,7 +75,6 @@ const Admin = () => {
     // 2. 쿠폰 데이터
     const unsubCoupons = onSnapshot(collection(db, "coupons"), (snapshot) => {
       const couponData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      // 생성일 역순 정렬
       couponData.sort((a, b) => b.createdAt?.seconds - a.createdAt?.seconds);
       setCoupons(couponData);
     });
@@ -91,13 +97,14 @@ const Admin = () => {
       } else {
         await setDoc(doc(db, "users", values.username), {
             ...userData,
-            password: values.password, // 초기 비밀번호 설정
+            password: values.password, 
             createdAt: Timestamp.now(),
             isBlocked: false,
             telegramChatId: '',
             isTelegramActive: false,
             isTelegramBlocked: false, 
-            strategyLevel: 1
+            strategyLevel: 1,
+            currentSessionId: null // 초기엔 접속 안함
         });
         message.success('신규 유저가 생성되었습니다.');
       }
@@ -118,7 +125,11 @@ const Admin = () => {
   // --- [유저 관리] 계정 차단/해제 (로그인 차단) ---
   const toggleUserBlock = async (user) => {
     const newStatus = !user.isBlocked;
-    await updateDoc(doc(db, "users", user.id), { isBlocked: newStatus });
+    // 차단 시 세션도 끊어서 강제 로그아웃 시키기
+    await updateDoc(doc(db, "users", user.id), { 
+        isBlocked: newStatus,
+        currentSessionId: newStatus ? null : user.currentSessionId 
+    });
     if(newStatus) message.warning('해당 계정의 접속을 차단했습니다.');
     else message.success('접속 차단을 해제했습니다.');
   };
@@ -149,7 +160,6 @@ const Admin = () => {
   const handleCreateCoupon = async () => {
       try {
           const values = await couponForm.validateFields();
-          // 랜덤 코드 생성 (ex: WB-X7Z9-A2)
           const code = `WB-${Math.random().toString(36).substr(2, 4).toUpperCase()}-${Math.random().toString(36).substr(2, 4).toUpperCase()}`;
           
           await addDoc(collection(db, "coupons"), {
@@ -167,7 +177,6 @@ const Admin = () => {
       }
   };
 
-  // --- [쿠폰 관리] 삭제 ---
   const handleDeleteCoupon = async (id) => {
       await deleteDoc(doc(db, "coupons", id));
       message.success("쿠폰 삭제됨");
@@ -178,20 +187,31 @@ const Admin = () => {
     {
       title: '유저정보',
       key: 'userinfo',
-      width: 180,
-      render: (_, record) => (
-          <div>
-              <div style={{fontWeight:'bold', color:'white', fontSize: 14}}>{record.id}</div>
-              <div style={{fontSize: 11, color: '#9ca3af', marginTop: 4}}>
-                 {record.role === 'super_admin' ? <Tag color="gold">최고관리자</Tag> : 
-                  record.role === 'admin' ? <Tag color="orange">관리자</Tag> : <Tag color="blue">회원</Tag>}
-              </div>
-          </div>
-      ),
+      width: 200,
+      render: (_, record) => {
+          // 🔥 [추가] 접속 상태 확인 (SessionId 존재 여부)
+          const isOnline = !!record.currentSessionId;
+          
+          return (
+            <div>
+                <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: 4}}>
+                    <div style={{fontWeight:'bold', color:'white', fontSize: 14}}>{record.id}</div>
+                    {/* 접속 상태 뱃지 */}
+                    <Tag icon={isOnline ? <WifiOutlined /> : <PoweroffOutlined />} color={isOnline ? "success" : "default"}>
+                        {isOnline ? "ONLINE" : "OFF"}
+                    </Tag>
+                </div>
+                <div style={{fontSize: 11, color: '#9ca3af'}}>
+                   {record.role === 'super_admin' ? <Tag color="gold">최고관리자</Tag> : 
+                    record.role === 'admin' ? <Tag color="orange">관리자</Tag> : 
+                    record.role === 'distributor' ? <Tag color="cyan">총판</Tag> : <Tag color="blue">회원</Tag>}
+                </div>
+            </div>
+          );
+      },
       filteredValue: [searchText],
       onFilter: (value, record) => String(record.id).toLowerCase().includes(value.toLowerCase()),
     },
-    // 🔥 [복구] 접속 로그 및 상태
     {
       title: '접속 정보',
       key: 'connection',
@@ -204,7 +224,7 @@ const Admin = () => {
               <div style={{color: '#9ca3af', marginTop: 2}}>
                   Last: {record.lastLogout ? dayjs(record.lastLogout.toDate()).format('MM-DD HH:mm') : '-'}
               </div>
-              {record.isBlocked && <Tag color="red" style={{marginTop: 4}}>🚫 접속차단됨</Tag>}
+              {record.isBlocked && <Tag color="red" style={{marginTop: 4, fontWeight:'bold'}}>🚫 접속차단됨</Tag>}
           </div>
       )
     },
@@ -218,7 +238,7 @@ const Admin = () => {
         return <Tag color={d < new Date() ? "red" : "geekblue"}>{dayjs(d).format('YYYY-MM-DD HH:mm')}</Tag>;
       }
     },
-    // 🔥 [통합] 텔레그램 관리
+    // 텔레그램 관리
     {
       title: <span><RobotOutlined /> 텔레그램</span>,
       key: 'telegram',
@@ -252,7 +272,6 @@ const Admin = () => {
             <Button size="small" icon={<EditOutlined />} onClick={() => { setEditingUser(record); form.setFieldsValue({ ...record, expiryDate: record.expiryDate ? dayjs(record.expiryDate.toDate()) : null }); setIsUserModalVisible(true); }} />
             <Button size="small" type="primary" onClick={() => extendTime(record.id, 30)}>+30일</Button>
             
-            {/* 🔥 [복구] 접속 차단 버튼 */}
             <Tooltip title={record.isBlocked ? "차단 해제" : "접속 차단"}>
                 <Button size="small" style={{background: record.isBlocked ? '#10b981' : '#f59e0b', border:'none', color:'white'}} icon={record.isBlocked ? <UnlockOutlined /> : <LockOutlined />} onClick={() => toggleUserBlock(record)} />
             </Tooltip>
@@ -265,7 +284,6 @@ const Admin = () => {
     }
   ];
 
-  // --- 쿠폰 테이블 컬럼 ---
   const couponColumns = [
       { title: '쿠폰 코드', dataIndex: 'code', key: 'code', render: text => <Tag color="cyan" style={{fontSize:14, padding:'5px 10px'}}>{text}</Tag> },
       { title: '기간', dataIndex: 'days', key: 'days', render: d => <b>{d}일</b> },
@@ -274,9 +292,14 @@ const Admin = () => {
       { title: '삭제', key: 'del', render: (_, r) => <Button danger size="small" icon={<DeleteOutlined />} onClick={() => handleDeleteCoupon(r.id)} /> }
   ];
 
+  // --- 통계 (접속자 수 실시간 반영) ---
+  const totalUsers = users.length;
+  // 🔥 접속자 수: currentSessionId가 있는 유저
+  const onlineUsers = users.filter(u => !!u.currentSessionId).length;
+  const telegramUsers = users.filter(u => u.telegramChatId && u.isTelegramActive && !u.isTelegramBlocked).length;
+
   return (
     <AdminLayout>
-        {/* 상단 헤더 */}
         <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: 20}}>
             <h1 style={{color:'white', margin:0, fontSize:24, fontWeight:900}}>ADMIN CONSOLE</h1>
             <div style={{display:'flex', gap: 10}}>
@@ -289,20 +312,19 @@ const Admin = () => {
             </div>
         </div>
 
-        {/* 통계 카드 */}
+        {/* 상단 통계 카드 */}
         <Row gutter={16} style={{marginBottom: 24}}>
-            <Col span={6}><StatsCard><Statistic title="총 회원수" value={users.length} prefix={<UserAddOutlined />} /></StatsCard></Col>
-            <Col span={6}><StatsCard><Statistic title="활성 이용자" value={users.filter(u=>u.expiryDate?.toDate()>new Date()).length} valueStyle={{color:'#10b981'}} prefix={<CheckCircleOutlined />} /></StatsCard></Col>
-            <Col span={6}><StatsCard><Statistic title="텔레그램 알림중" value={users.filter(u=>u.isTelegramActive && u.telegramChatId && !u.isTelegramBlocked).length} valueStyle={{color:'#3b82f6'}} prefix={<RobotOutlined />} /></StatsCard></Col>
+            <Col span={6}><StatsCard><Statistic title="총 회원수" value={totalUsers} prefix={<UserAddOutlined />} /></StatsCard></Col>
+            {/* 🔥 실시간 접속자 수 표시 */}
+            <Col span={6}><StatsCard><Statistic title="현재 접속자 (ONLINE)" value={onlineUsers} valueStyle={{color:'#10b981'}} prefix={<WifiOutlined />} /></StatsCard></Col>
+            <Col span={6}><StatsCard><Statistic title="텔레그램 발송중" value={telegramUsers} valueStyle={{color:'#3b82f6'}} prefix={<RobotOutlined />} /></StatsCard></Col>
             <Col span={6}><StatsCard><Statistic title="미사용 쿠폰" value={coupons.filter(c=>!c.isUsed).length} valueStyle={{color:'#f59e0b'}} prefix={<BarcodeOutlined />} /></StatsCard></Col>
         </Row>
 
-        {/* 검색창 */}
         <div style={{marginBottom: 16, display:'flex', justifyContent:'flex-end'}}>
             <Input placeholder="ID 검색..." prefix={<SearchOutlined />} onChange={e => setSearchText(e.target.value)} style={{width: 250, background:'#1f2937', border:'1px solid #374151', color:'white'}} />
         </div>
 
-        {/* 메인 유저 테이블 */}
         <StyledTable 
             columns={userColumns} 
             dataSource={users} 
@@ -311,7 +333,6 @@ const Admin = () => {
             pagination={{ pageSize: 8 }} 
         />
 
-        {/* --- [모달 1] 유저 생성/수정 --- */}
         <Modal
             title={editingUser ? "유저 정보 수정" : "신규 유저 생성"}
             open={isUserModalVisible}
@@ -322,7 +343,6 @@ const Admin = () => {
                 <Form.Item name="username" label="아이디" rules={[{ required: true }]}>
                     <Input disabled={!!editingUser} />
                 </Form.Item>
-                {/* 🔥 [복구] 생성 시 비밀번호(코드) 입력 필드 */}
                 {!editingUser && (
                     <Form.Item name="password" label="비밀번호 (코드)" rules={[{ required: true }]}>
                         <Input.Password placeholder="유저에게 전달할 코드 입력" />
@@ -342,7 +362,6 @@ const Admin = () => {
             </Form>
         </Modal>
 
-        {/* --- [모달 2] 쿠폰 관리 --- */}
         <Modal
             title="쿠폰 관리 시스템"
             open={isCouponModalVisible}
