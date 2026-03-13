@@ -4,27 +4,33 @@ import {
   TrophyOutlined, ThunderboltOutlined, ScanOutlined, FireOutlined, 
   AimOutlined, HistoryOutlined, SoundOutlined, MutedOutlined 
 } from '@ant-design/icons';
-import styled, { keyframes } from 'styled-components';
+import styled, { keyframes, css } from 'styled-components';
 import { collection, onSnapshot, query, orderBy, limit } from "firebase/firestore";
 import { db } from '../firebase';
 
 const { Text } = Typography;
 
-// --- 🎵 사운드 파일 ---
+// --- 🎵 사운드 파일 (삐삐삐 소리) ---
 const TENSION_SOUND_URL = "https://assets.mixkit.co/active_storage/sfx/209/209-preview.mp3"; 
 const FANFARE_SOUND_URL = "https://assets.mixkit.co/active_storage/sfx/2019/2019-preview.mp3";
 
-// --- ✨ 애니메이션 ---
-const pulseGold = keyframes`
-  0% { box-shadow: 0 0 0 0 rgba(212, 175, 55, 0.4); border-color: #d4af37; }
-  70% { box-shadow: 0 0 0 10px rgba(212, 175, 55, 0); border-color: #ffd700; }
-  100% { box-shadow: 0 0 0 0 rgba(212, 175, 55, 0); border-color: #374151; }
+// --- ✨ 고급스러운 애니메이션 ---
+const glowGold = keyframes`
+  0% { box-shadow: 0 0 5px rgba(212, 175, 55, 0.2); border-color: rgba(212, 175, 55, 0.5); }
+  50% { box-shadow: 0 0 20px rgba(212, 175, 55, 0.6); border-color: #ffd700; }
+  100% { box-shadow: 0 0 5px rgba(212, 175, 55, 0.2); border-color: rgba(212, 175, 55, 0.5); }
 `;
 
-const pulseRed = keyframes`
-  0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); border-color: #ef4444; }
-  70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); border-color: #ef4444; }
-  100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); border-color: #374151; }
+const glowRed = keyframes`
+  0% { box-shadow: 0 0 5px rgba(239, 68, 68, 0.2); border-color: rgba(239, 68, 68, 0.5); }
+  50% { box-shadow: 0 0 25px rgba(239, 68, 68, 0.8); border-color: #ff0000; }
+  100% { box-shadow: 0 0 5px rgba(239, 68, 68, 0.2); border-color: rgba(239, 68, 68, 0.5); }
+`;
+
+const neonTextAnim = keyframes`
+  0% { text-shadow: 0 0 5px #00ff00, 0 0 10px #00ff00; color: #ccff00; }
+  50% { text-shadow: 0 0 20px #00ff00, 0 0 30px #00ff00; color: #ffffff; }
+  100% { text-shadow: 0 0 5px #00ff00, 0 0 10px #00ff00; color: #ccff00; }
 `;
 
 const scanMove = keyframes`
@@ -123,27 +129,30 @@ const GameCard = styled.div`
   border: 1px solid #4b5563;
   position: relative;
   transition: transform 0.3s ease;
+  overflow: hidden;
+
+  /* 배경 은은한 그라데이션 */
+  background: radial-gradient(circle at top right, rgba(255,255,255,0.03), transparent);
 
   &:hover { transform: translateY(-5px); }
 
   &.waiting {
     border-color: #d4af37;
-    background: linear-gradient(145deg, #1f2937 0%, #292524 100%);
   }
   
+  /* 진입 임박: 금색 깜빡임 */
   &.imminent {
-    animation: ${pulseGold} 1.5s infinite;
+    animation: ${glowGold} 2s infinite;
     border-width: 2px;
   }
 
+  /* 배팅 중: 빨간색 깜빡임 */
   &.betting {
-    border-color: #ef4444;
-    animation: ${pulseRed} 1.5s infinite;
-    background: linear-gradient(145deg, #1f2937 0%, #450a0a 100%);
+    animation: ${glowRed} 1.5s infinite;
+    border-width: 2px;
+    background: linear-gradient(145deg, #1f2937 0%, #350808 100%);
   }
 `;
-
-// 🔥 [중요] CountBox, CountNumber 스타일을 삭제했습니다! (에러 원인 제거)
 
 const PickDisplay = styled.div`
   font-size: 42px; 
@@ -153,8 +162,8 @@ const PickDisplay = styled.div`
   line-height: 1;
   margin-top: 15px;
   
-  &.P { color: #3b82f6; text-shadow: 0 0 20px rgba(59, 130, 246, 0.5); }
-  &.B { color: #ef4444; text-shadow: 0 0 20px rgba(239, 68, 68, 0.5); }
+  &.P { color: #3b82f6; text-shadow: 0 0 25px rgba(59, 130, 246, 0.6); }
+  &.B { color: #ef4444; text-shadow: 0 0 25px rgba(239, 68, 68, 0.6); }
 `;
 
 const ScanZone = styled.div`
@@ -169,11 +178,28 @@ const ScanZone = styled.div`
   .scan-bar {
     height: 2px;
     width: 100%;
-    background: linear-gradient(90deg, transparent, #00e5ff, transparent);
+    background: linear-gradient(90deg, transparent, #00ff00, transparent);
     background-size: 200% 100%;
-    animation: ${scanMove} 2s linear infinite;
+    animation: ${scanMove} 1.5s linear infinite;
     margin-bottom: 10px;
   }
+`;
+
+// 🔥 [NEW] 형광 네온 텍스트 스타일
+const NeonText = styled.span`
+  font-weight: 900;
+  font-size: 16px;
+  letter-spacing: 1px;
+  display: block;
+  margin-bottom: 5px;
+  
+  /* 무지개/형광 그라데이션 */
+  background: linear-gradient(to right, #4ade80, #22d3ee);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  
+  /* 그림자 효과로 네온 느낌 */
+  filter: drop-shadow(0 0 5px rgba(74, 222, 128, 0.5));
 `;
 
 const DarkTable = styled(Table)`
@@ -185,7 +211,6 @@ const DarkTable = styled(Table)`
   .ant-pagination-item-active { border-color: #d4af37 !important; a { color: #d4af37 !important; } }
 `;
 
-// 내용 중앙 정렬 래퍼
 const CenterContent = styled.div`
   flex: 1; 
   display: flex;
@@ -243,7 +268,7 @@ const LivePicks = () => {
         }
       };
       playTension();
-      intervalId = setInterval(playTension, 3000);
+      intervalId = setInterval(playTension, 3000); // 3초마다 삐삐삐
     } else {
       if(intervalId) clearInterval(intervalId);
       tensionAudioRef.current.pause();
@@ -275,6 +300,7 @@ const LivePicks = () => {
     return () => unsubscribe();
   }, [userEntryLevel]);
 
+  // (히스토리 로직 생략 없이 그대로 유지)
   useEffect(() => {
     const q = query(collection(db, "game_history"), orderBy("created_at", "desc"), limit(100));
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -291,9 +317,7 @@ const LivePicks = () => {
       } else {
         isFirstLoad.current = false;
       }
-
       const historyData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      
       let winCount = 0, totalStepScore = 0, safeHitCount = 0;
       historyData.forEach(item => {
           if (item.result === 'WIN') {
@@ -301,13 +325,11 @@ const LivePicks = () => {
               if (item.step <= 4) safeHitCount++; 
           }
       });
-
       let streak = 0;
       for (let i = 0; i < historyData.length; i++) {
           if (historyData[i].result === 'WIN' && historyData[i].step <= 4) streak++;
           else break;
       }
-      
       setStats({
         totalScore: totalStepScore, totalGames: historyData.length,
         winRate: historyData.length > 0 ? Math.round((winCount / historyData.length) * 100) : 0,
@@ -337,6 +359,7 @@ const LivePicks = () => {
         </SoundToggleBtn>
       </HeaderContainer>
 
+      {/* 통계 패널 (기존 유지) */}
       <HistoryPanel>
         <div style={{textAlign:'center'}}>
             <div style={{color:'#9ca3af', marginBottom: 5, fontSize:12}}>TOTAL WIN RATE</div>
@@ -379,8 +402,8 @@ const LivePicks = () => {
                                 <CenterContent>
                                     {isCountdown ? (
                                         <div style={{textAlign:'center'}}>
-                                            {/* 박스 없이 텍스트만 표시 */}
-                                            <Text style={{color:'#fbbf24', fontSize:14, fontWeight:'bold', letterSpacing:1}}>
+                                            {/* 🔥 카운트다운 텍스트 강조 */}
+                                            <Text style={{color:'#fbbf24', fontSize:18, fontWeight:'bold', letterSpacing:1, textShadow: '0 0 10px rgba(251, 191, 36, 0.5)'}}>
                                                 ⚠️ 진입 임박 ({remaining}판 전)
                                             </Text>
                                             
@@ -393,13 +416,10 @@ const LivePicks = () => {
                                         </div>
                                     ) : (
                                         <div style={{textAlign:'center'}}>
-                                            <ScanOutlined spin style={{ fontSize: 40, color: '#4b5563', marginBottom: 15 }} />
-                                            <Text style={{ display: 'block', color: '#6b7280', fontSize: 14, fontWeight: 'bold' }}>
-                                                패턴 정밀 분석중
-                                            </Text>
-                                            <Text style={{ display: 'block', color: '#4b5563', fontSize: 12, marginTop: 5 }}>
-                                                데이터 수집 단계
-                                            </Text>
+                                            <ScanOutlined spin style={{ fontSize: 40, color: '#4b5563', marginBottom: 20 }} />
+                                            {/* 🔥 형광 네온 텍스트 적용 */}
+                                            <NeonText>패턴 정밀 분석중</NeonText>
+                                            <NeonText style={{fontSize:12, opacity:0.8}}>데이터 수집 단계</NeonText>
                                         </div>
                                     )}
                                 </CenterContent>
@@ -428,6 +448,10 @@ const LivePicks = () => {
             <FireOutlined className="icon" />
             <h2>Active Betting</h2>
           </SectionTitle>
+          
+          {/* 🔥 [테스트 코드] 배팅 방이 없어도 하나 강제로 보여줘서 디자인 확인 (배포 전 삭제하세요) */}
+          {/* bettingRooms.length === 0 ? ... 이 부분을 잠시 주석처리하고 아래처럼 더미 데이터를 넣어보셔도 됩니다. */}
+          
           {bettingRooms.length === 0 ? (
              <div style={{textAlign:'center', color:'#4b5563', padding: 20}}>현재 진행 중인 배팅이 없습니다.</div>
           ) : (
@@ -441,8 +465,8 @@ const LivePicks = () => {
 
                         <CenterContent>
                             <div style={{textAlign:'center'}}>
-                                <div style={{fontSize:11, color:'#ef4444', marginBottom: 10, letterSpacing:1}}>
-                                    <SoundOutlined spin /> BETTING LIVE
+                                <div style={{fontSize:12, color:'#ef4444', marginBottom: 15, letterSpacing:2, fontWeight:'bold', animation: 'pulse 1s infinite'}}>
+                                    <SoundOutlined /> BETTING LIVE
                                 </div>
                                 <PickDisplay className={room.pick}>
                                     {room.pick === 'P' ? 'PLAYER' : 'BANKER'}
