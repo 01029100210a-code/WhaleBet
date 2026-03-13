@@ -1,23 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { Typography, Row, Col, Card, Input, Button, message, Divider, Tag, Switch } from 'antd';
+import { Typography, Row, Col, Card, Input, Button, message, Tag, Switch, Spin } from 'antd';
 import { 
   SettingOutlined, RobotOutlined, SafetyCertificateOutlined, 
   ThunderboltOutlined, CheckCircleOutlined, BellOutlined, SendOutlined 
 } from '@ant-design/icons';
 import styled, { keyframes } from 'styled-components';
+import { doc, getDoc, updateDoc } from "firebase/firestore"; // 🔥 Firestore 함수 추가
+import { db } from '../firebase'; // 🔥 Firebase 설정 가져오기
 
-const { Title, Text, Paragraph } = Typography;
+const { Title, Text } = Typography;
 
 // --- ✨ 애니메이션 ---
 const fadeIn = keyframes`
   from { opacity: 0; transform: translateY(20px); }
   to { opacity: 1; transform: translateY(0); }
-`;
-
-const glowBorder = keyframes`
-  0% { border-color: #374151; box-shadow: 0 0 0 rgba(0,0,0,0); }
-  50% { border-color: #10b981; box-shadow: 0 0 15px rgba(16, 185, 129, 0.3); }
-  100% { border-color: #374151; box-shadow: 0 0 0 rgba(0,0,0,0); }
 `;
 
 // --- 🎨 스타일 ---
@@ -132,8 +128,18 @@ const SaveButton = styled(Button)`
   }
 `;
 
+const DashboardTitle = styled.h1`
+  font-size: 28px;
+  font-weight: 900;
+  margin: 0 0 5px 0;
+  background: linear-gradient(to right, #fff, #94a3b8);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  letter-spacing: 1px;
+`;
+
 const Settings = () => {
-  // localStorage에서 초기값 로드
+  // 1. 초기 상태: 로컬 스토리지 값으로 먼저 세팅 (빠른 렌더링)
   const [entryLevel, setEntryLevel] = useState(() => {
     return parseInt(localStorage.getItem('entryLevel')) || 1;
   });
@@ -146,6 +152,44 @@ const Settings = () => {
     return localStorage.getItem('isTelegramActive') === 'true';
   });
 
+  const [loading, setLoading] = useState(true);
+  
+  // 현재 로그인한 사용자 아이디 가져오기
+  const username = localStorage.getItem('username');
+
+  // 🔥 [로드] 컴포넌트 마운트 시 Firebase에서 설정값 가져오기
+  useEffect(() => {
+    const fetchSettings = async () => {
+      if (!username) {
+          setLoading(false);
+          return;
+      }
+      try {
+        const docRef = doc(db, "users", username);
+        const docSnap = await getDoc(docRef);
+        
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          // DB에 데이터가 있으면 state 업데이트
+          if (data.strategyLevel) setEntryLevel(data.strategyLevel);
+          if (data.telegramChatId) setTelegramId(data.telegramChatId);
+          if (data.isTelegramActive !== undefined) setIsBotActive(data.isTelegramActive);
+
+          // 로컬 스토리지도 동기화 (최신화)
+          localStorage.setItem('entryLevel', data.strategyLevel || 1);
+          if(data.telegramChatId) localStorage.setItem('telegramChatId', data.telegramChatId);
+          localStorage.setItem('isTelegramActive', data.isTelegramActive || false);
+        }
+      } catch (error) {
+        console.error("설정 로드 중 오류:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchSettings();
+  }, [username]);
+
   // 단계별 전략 설명 데이터
   const strategies = [
     { level: 1, title: '1단계 진입 (공격형)', desc: '1단계 배팅부터 모든 픽을 알림받습니다. 가장 많은 배팅 기회가 있지만 리스크가 존재합니다.', icon: <ThunderboltOutlined /> },
@@ -156,30 +200,60 @@ const Settings = () => {
     { level: 6, title: '6단계 진입 (스나이퍼)', desc: '극악의 확률을 기다려 6단계 막타만 노립니다. 기회는 적지만 확실합니다.', icon: <SettingOutlined /> },
   ];
 
-  // 설정 저장 핸들러
-  const handleSaveStrategy = () => {
-    localStorage.setItem('entryLevel', entryLevel);
-    message.success({
-      content: `전략이 저장되었습니다! 이제 ${entryLevel}단계부터 알림이 발생합니다.`,
-      icon: <CheckCircleOutlined style={{ color: '#10b981' }} />,
-      style: { marginTop: '20vh' },
-    });
-  };
+  // 🔥 [저장] 전략 설정 핸들러 (Firebase + LocalStorage)
+  const handleSaveStrategy = async () => {
+    if (!username) return message.error('로그인 정보가 없습니다.');
 
-  const handleSaveTelegram = () => {
-    localStorage.setItem('telegramChatId', telegramId);
-    localStorage.setItem('isTelegramActive', isBotActive);
-    
-    if (!telegramId) {
-      message.warning('Telegram Chat ID를 입력해주세요.');
-      return;
+    try {
+        // 1. Firebase에 저장 (백엔드 연동용)
+        await updateDoc(doc(db, "users", username), {
+            strategyLevel: entryLevel
+        });
+
+        // 2. LocalStorage에 저장 (프론트엔드 즉시 반영용)
+        localStorage.setItem('entryLevel', entryLevel);
+
+        message.success({
+            content: `전략이 저장되었습니다! 이제 ${entryLevel}단계부터 알림이 발생합니다.`,
+            icon: <CheckCircleOutlined style={{ color: '#10b981' }} />,
+            style: { marginTop: '20vh' },
+        });
+    } catch (e) {
+        console.error(e);
+        message.error('설정 저장 중 오류가 발생했습니다.');
     }
-
-    message.success({
-      content: '텔레그램 설정이 업데이트 되었습니다.',
-      style: { marginTop: '20vh' },
-    });
   };
+
+  // 🔥 [저장] 텔레그램 설정 핸들러 (Firebase + LocalStorage)
+  const handleSaveTelegram = async () => {
+    if (!username) return message.error('로그인 정보가 없습니다.');
+
+    try {
+        // 1. Firebase에 저장 (백엔드 연동용)
+        await updateDoc(doc(db, "users", username), {
+            telegramChatId: telegramId,
+            isTelegramActive: isBotActive
+        });
+        
+        // 2. LocalStorage에 저장
+        localStorage.setItem('telegramChatId', telegramId);
+        localStorage.setItem('isTelegramActive', isBotActive);
+        
+        if (!telegramId && isBotActive) {
+            message.warning('알림을 켰지만 Chat ID가 비어있습니다.');
+        } else {
+            message.success({
+                content: '텔레그램 설정이 서버에 저장되었습니다.',
+                style: { marginTop: '20vh' },
+            });
+        }
+    } catch (e) {
+        console.error(e);
+        message.error('설정 저장 실패');
+    }
+  };
+
+  if (loading) return <div style={{textAlign:'center', marginTop:100}}><Spin size="large" /></div>;
 
   return (
     <Container>
@@ -275,15 +349,5 @@ const Settings = () => {
     </Container>
   );
 };
-
-const DashboardTitle = styled.h1`
-  font-size: 28px;
-  font-weight: 900;
-  margin: 0 0 5px 0;
-  background: linear-gradient(to right, #fff, #94a3b8);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  letter-spacing: 1px;
-`;
 
 export default Settings;
