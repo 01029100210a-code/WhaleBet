@@ -1,19 +1,29 @@
 import React, { useState, useEffect } from 'react';
 import { Layout, Menu, Button, Modal, Tag } from 'antd';
-import { DesktopOutlined, GiftOutlined, LogoutOutlined, CrownOutlined, SettingOutlined, UserOutlined, LockOutlined } from '@ant-design/icons';
+import { 
+  DesktopOutlined, 
+  GiftOutlined, 
+  LogoutOutlined, 
+  CrownOutlined, 
+  SettingOutlined, 
+  UserOutlined, 
+  LockOutlined 
+} from '@ant-design/icons';
 import { doc, onSnapshot, updateDoc, Timestamp } from "firebase/firestore";
 import { db } from '../firebase'; 
 import { useNavigate } from 'react-router-dom';
 import styled from 'styled-components';
 import axios from 'axios'; 
 
-// 🔥 [수정 1] Dashboard 대신 LivePicks를 불러옵니다!
+// 🔥 컴포넌트 임포트
 import LivePicks from './LivePicks'; 
 import RouletteGame from './RouletteGame';
 import MyPage from './MyPage';
+import Settings from './Settings'; // 🔥 [추가] 전략 설정 페이지 연결
 
 const { Header, Content, Sider } = Layout;
 
+// 스타일 정의
 const DarkLayout = styled(Layout)`
   min-height: 100vh;
   .ant-layout-sider { background: #0f172a; border-right: 1px solid #1e293b; }
@@ -31,9 +41,11 @@ const Main = () => {
   
   const myUsername = localStorage.getItem('username');
   const mySessionId = localStorage.getItem('sessionId');
+  
+  // 관리자 권한 목록
   const adminRoles = ['super_admin', 'admin', 'distributor', 'store'];
 
-  // 로그아웃
+  // 로그아웃 핸들러
   const handleLogout = async () => {
       if (myUsername) {
           try {
@@ -47,7 +59,7 @@ const Main = () => {
       navigate('/');
   };
 
-  // IP 저장
+  // IP 저장 (최초 1회)
   useEffect(() => {
       const saveIp = async () => {
           try {
@@ -60,37 +72,69 @@ const Main = () => {
       saveIp();
   }, [myUsername]);
 
-  // 세션 체크
+  // 세션 및 유저 상태 실시간 감지
   useEffect(() => {
     if (!myUsername || !mySessionId) { handleLogout(); return; }
+
     const unsub = onSnapshot(doc(db, "users", myUsername), (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
         setUserData(data);
-        if (data.isBlocked) { Modal.error({ title: '차단됨', content: '관리자에 의해 차단되었습니다.', onOk: handleLogout }); return; }
-        if (data.currentSessionId !== mySessionId) { Modal.warning({ title: '중복 로그인', content: '다른 기기 접속 감지.', onOk: handleLogout }); }
-      } else { handleLogout(); }
+
+        // 차단 체크
+        if (data.isBlocked) { 
+            Modal.error({ 
+                title: '차단됨', 
+                content: '관리자에 의해 차단되었습니다.', 
+                onOk: handleLogout 
+            }); 
+            return; 
+        }
+
+        // 중복 로그인 체크
+        if (data.currentSessionId !== mySessionId) { 
+            Modal.warning({ 
+                title: '중복 로그인', 
+                content: '다른 기기에서 접속이 감지되었습니다.', 
+                onOk: handleLogout 
+            }); 
+        }
+      } else { 
+          handleLogout(); 
+      }
     });
+
     return () => unsub();
   }, [myUsername, mySessionId, navigate]);
 
-  // 이용권 유효 여부
+  // 이용권 유효성 검사 함수
   const isSubscriptionValid = () => {
       if (!userData) return false;
-      if (userData.role === 'super_admin' || userData.role === 'admin') return true; 
+      // 관리자 등급은 무제한
+      if (adminRoles.includes(userData.role)) return true; 
+      
       if (!userData.expiryDate) return false;
+      
       const expiry = userData.expiryDate.toDate ? userData.expiryDate.toDate() : new Date(userData.expiryDate);
       return expiry > new Date();
   };
 
+  // 남은 시간 표시 함수
   const getRemainingTime = () => {
       if (!userData?.expiryDate) return "만료됨";
+      
       const expiry = userData.expiryDate.toDate ? userData.expiryDate.toDate() : new Date(userData.expiryDate);
       if (expiry < new Date()) return "만료됨";
+      
       const diff = expiry - new Date();
       const days = Math.floor(diff / (1000 * 60 * 60 * 24));
       const hours = Math.floor((diff / (1000 * 60 * 60)) % 24);
       return `${days}일 ${hours}시간 남음`;
+  };
+
+  // 관리자 페이지 이동
+  const handleAdminClick = () => {
+      navigate('/admin');
   };
 
   return (
@@ -99,13 +143,32 @@ const Main = () => {
         <div style={{ height: 64, margin: 16, background: 'rgba(255, 255, 255, 0.05)', borderRadius: 8, display:'flex', alignItems:'center', justifyContent:'center' }}>
             <h2 style={{color:'white', margin:0, fontWeight:900, fontSize: collapsed ? 10 : 20}}>WHALEBET</h2>
         </div>
-        <Menu theme="dark" defaultSelectedKeys={['1']} mode="inline" onClick={(e) => setSelectedKey(e.key)}>
+        
+        <Menu 
+            theme="dark" 
+            defaultSelectedKeys={['1']} 
+            mode="inline" 
+            selectedKeys={[selectedKey]}
+            onClick={(e) => {
+                if (e.key === 'admin') {
+                    handleAdminClick();
+                } else {
+                    setSelectedKey(e.key);
+                }
+            }}
+        >
           <Menu.Item key="1" icon={<DesktopOutlined />}>실시간 픽 (Live)</Menu.Item>
           <Menu.Item key="2" icon={<GiftOutlined />}>룰렛 게임 (Event)</Menu.Item>
           <Menu.Item key="3" icon={<SettingOutlined />}>전략 설정</Menu.Item>
           <Menu.Item key="4" icon={<UserOutlined />}>마이페이지</Menu.Item>
+
+          {/* 관리자 메뉴 (하단 분리) */}
           {userData && adminRoles.includes(userData.role) && (
-            <Menu.Item key="admin" icon={<CrownOutlined style={{color: '#d4af37'}} />} style={{marginTop: 50, color: '#d4af37', fontWeight:'bold'}} onClick={() => navigate('/admin')}>
+            <Menu.Item 
+                key="admin" 
+                icon={<CrownOutlined style={{color: '#d4af37'}} />} 
+                style={{marginTop: 50, color: '#d4af37', fontWeight:'bold'}}
+            >
               관리자 페이지
             </Menu.Item>
           )}
@@ -116,10 +179,14 @@ const Main = () => {
         <Header>
             <div style={{color:'white', fontWeight:'bold', display:'flex', alignItems:'center', gap:15}}>
                 {userData?.role === 'super_admin' && <Tag color="gold">최고관리자</Tag>}
+                {userData?.role === 'admin' && <Tag color="orange">관리자</Tag>}
+                {userData?.role === 'distributor' && <Tag color="cyan">총판</Tag>}
+                {userData?.role === 'store' && <Tag color="green">매장</Tag>}
                 {userData?.role === 'user' && <Tag color="blue">회원</Tag>}
+                
                 <span>{myUsername}님</span>
                 
-                <Tag color={isSubscriptionValid() ? "cyan" : "red"} style={{fontSize:13, padding:'4px 10px'}}>
+                <Tag color={isSubscriptionValid() ? "cyan" : "red"} style={{fontSize:13, padding:'4px 10px', marginLeft: 10}}>
                     {isSubscriptionValid() ? `이용권: ${getRemainingTime()}` : "🛑 이용권 만료"}
                 </Tag>
             </div>
@@ -127,7 +194,7 @@ const Main = () => {
         </Header>
         
         <Content>
-          {/* 🔥 [수정 2] Dashboard -> LivePicks 로 변경! */}
+          {/* 1. 실시간 픽 (이용권 체크) */}
           {selectedKey === '1' && (
               isSubscriptionValid() ? <LivePicks /> : (
                   <div style={{textAlign:'center', marginTop:100, color:'white'}}>
@@ -138,12 +205,19 @@ const Main = () => {
                   </div>
               )
           )}
+
+          {/* 2. 룰렛 게임 */}
           {selectedKey === '2' && <RouletteGame user={userData} />}
-          {selectedKey === '3' && <div style={{color:'white', textAlign:'center', marginTop:100}}><h2>🔧 전략 설정 페이지 준비중</h2></div>}
+
+          {/* 3. 전략 설정 (🔥 수정됨) */}
+          {selectedKey === '3' && <Settings />}
+
+          {/* 4. 마이페이지 */}
           {selectedKey === '4' && <MyPage user={userData} />}
         </Content>
       </Layout>
     </DarkLayout>
   );
 };
+
 export default Main;
