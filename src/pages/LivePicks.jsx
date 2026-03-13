@@ -4,13 +4,13 @@ import {
   TrophyOutlined, ThunderboltOutlined, ScanOutlined, FireOutlined, 
   AimOutlined, HistoryOutlined, SoundOutlined, MutedOutlined 
 } from '@ant-design/icons';
-import styled, { keyframes, css } from 'styled-components';
+import styled, { keyframes } from 'styled-components';
 import { collection, onSnapshot, query, orderBy, limit } from "firebase/firestore";
 import { db } from '../firebase';
 
 const { Text } = Typography;
 
-// --- 🎵 사운드 파일 (삐삐삐 소리) ---
+// --- 🎵 사운드 파일 ---
 const TENSION_SOUND_URL = "https://assets.mixkit.co/active_storage/sfx/209/209-preview.mp3"; 
 const FANFARE_SOUND_URL = "https://assets.mixkit.co/active_storage/sfx/2019/2019-preview.mp3";
 
@@ -25,12 +25,6 @@ const glowRed = keyframes`
   0% { box-shadow: 0 0 5px rgba(239, 68, 68, 0.2); border-color: rgba(239, 68, 68, 0.5); }
   50% { box-shadow: 0 0 25px rgba(239, 68, 68, 0.8); border-color: #ff0000; }
   100% { box-shadow: 0 0 5px rgba(239, 68, 68, 0.2); border-color: rgba(239, 68, 68, 0.5); }
-`;
-
-const neonTextAnim = keyframes`
-  0% { text-shadow: 0 0 5px #00ff00, 0 0 10px #00ff00; color: #ccff00; }
-  50% { text-shadow: 0 0 20px #00ff00, 0 0 30px #00ff00; color: #ffffff; }
-  100% { text-shadow: 0 0 5px #00ff00, 0 0 10px #00ff00; color: #ccff00; }
 `;
 
 const scanMove = keyframes`
@@ -185,20 +179,16 @@ const ScanZone = styled.div`
   }
 `;
 
-// 🔥 [NEW] 형광 네온 텍스트 스타일
+// 🔥 형광 네온 텍스트 스타일
 const NeonText = styled.span`
   font-weight: 900;
   font-size: 16px;
   letter-spacing: 1px;
   display: block;
   margin-bottom: 5px;
-  
-  /* 무지개/형광 그라데이션 */
   background: linear-gradient(to right, #4ade80, #22d3ee);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
-  
-  /* 그림자 효과로 네온 느낌 */
   filter: drop-shadow(0 0 5px rgba(74, 222, 128, 0.5));
 `;
 
@@ -233,53 +223,92 @@ const LivePicks = () => {
 
   const userEntryLevel = parseInt(localStorage.getItem('entryLevel')) || 1; 
 
-  const tensionAudioRef = useRef(new Audio(TENSION_SOUND_URL));
-  const fanfareAudioRef = useRef(new Audio(FANFARE_SOUND_URL));
+  // --- 🔊 오디오 Refs ---
+  const tensionAudioRef = useRef(null);
+  const fanfareAudioRef = useRef(null);
   const isFirstLoad = useRef(true);
 
+  // 1. 오디오 객체 초기화 (컴포넌트 마운트 시 1회)
   useEffect(() => {
+    tensionAudioRef.current = new Audio(TENSION_SOUND_URL);
     tensionAudioRef.current.volume = 0.5;
+
+    fanfareAudioRef.current = new Audio(FANFARE_SOUND_URL);
     fanfareAudioRef.current.volume = 0.7;
   }, []);
 
-  const toggleSound = () => {
+  // 2. 사운드 토글 함수 (권한 획득 로직 포함)
+  const toggleSound = async () => {
     if (!isSoundEnabled) {
-      tensionAudioRef.current.play().then(() => {
-        tensionAudioRef.current.pause(); tensionAudioRef.current.currentTime = 0;
-      }).catch(() => {});
-      fanfareAudioRef.current.play().then(() => {
-        fanfareAudioRef.current.pause(); fanfareAudioRef.current.currentTime = 0;
-      }).catch(() => {});
-      setIsSoundEnabled(true);
+      // 켜는 순간: 두 오디오를 살짝 재생하고 멈춰서 브라우저 권한을 획득함
+      try {
+        if (tensionAudioRef.current) {
+            await tensionAudioRef.current.play();
+            tensionAudioRef.current.pause();
+            tensionAudioRef.current.currentTime = 0;
+        }
+        if (fanfareAudioRef.current) {
+            await fanfareAudioRef.current.play();
+            fanfareAudioRef.current.pause();
+            fanfareAudioRef.current.currentTime = 0;
+        }
+        setIsSoundEnabled(true);
+      } catch (e) {
+        console.error("오디오 권한 획득 실패:", e);
+      }
     } else {
+      // 끄는 순간: 강제 정지
       setIsSoundEnabled(false);
-      tensionAudioRef.current.pause();
-      fanfareAudioRef.current.pause();
+      if (tensionAudioRef.current) {
+        tensionAudioRef.current.pause();
+        tensionAudioRef.current.currentTime = 0;
+      }
+      if (fanfareAudioRef.current) {
+        fanfareAudioRef.current.pause();
+        fanfareAudioRef.current.currentTime = 0;
+      }
     }
   };
 
+  // 3. 배팅방 존재 여부 (단순 boolean 값)
+  const hasActiveBetting = bettingRooms.length > 0;
+
+  // 4. [핵심 수정] 텐션 사운드 재생 로직
+  // bettingRooms 배열 자체가 바뀌어도 hasActiveBetting(true/false)이 안 바뀌면 재실행 안 됨 -> 소리 끊김 방지
   useEffect(() => {
     let intervalId = null;
-    if (isSoundEnabled && bettingRooms.length > 0) {
-      const playTension = () => {
-        if (tensionAudioRef.current.paused) {
-          tensionAudioRef.current.currentTime = 0;
-          tensionAudioRef.current.play().catch(e => console.log("Sound Blocked:", e));
+
+    if (isSoundEnabled && hasActiveBetting && tensionAudioRef.current) {
+      const playTension = async () => {
+        try {
+            // 재생 중이든 아니든 처음으로 돌리고 재생 (삐- 삐- 반복)
+            tensionAudioRef.current.currentTime = 0;
+            await tensionAudioRef.current.play();
+        } catch (e) {
+            console.log("Auto-play prevented", e);
         }
       };
-      playTension();
-      intervalId = setInterval(playTension, 3000); // 3초마다 삐삐삐
-    } else {
-      if(intervalId) clearInterval(intervalId);
-      tensionAudioRef.current.pause();
-      tensionAudioRef.current.currentTime = 0;
-    }
-    return () => {
-      if(intervalId) clearInterval(intervalId);
-      tensionAudioRef.current.pause();
-    };
-  }, [bettingRooms.length, isSoundEnabled]);
 
+      // 즉시 1회 재생
+      playTension();
+      // 3초 간격 반복
+      intervalId = setInterval(playTension, 3000);
+    } else {
+      // 조건 안 맞으면 정지
+      if (tensionAudioRef.current) {
+        tensionAudioRef.current.pause();
+        tensionAudioRef.current.currentTime = 0;
+      }
+    }
+
+    // cleanup: 이펙트가 사라질 때(소리 끄거나 방 다 없어졌을 때) 인터벌 해제
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [isSoundEnabled, hasActiveBetting]); 
+
+
+  // Firestore 데이터 리스너
   useEffect(() => {
     const q = query(collection(db, "rooms")); 
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -300,7 +329,7 @@ const LivePicks = () => {
     return () => unsubscribe();
   }, [userEntryLevel]);
 
-  // (히스토리 로직 생략 없이 그대로 유지)
+  // 히스토리 & 승리 사운드 (기존 유지)
   useEffect(() => {
     const q = query(collection(db, "game_history"), orderBy("created_at", "desc"), limit(100));
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -308,7 +337,8 @@ const LivePicks = () => {
         snapshot.docChanges().forEach((change) => {
           if (change.type === "added") {
             const data = change.doc.data();
-            if (isSoundEnabled && data.result === 'WIN') {
+            // 승리 시 팡파레
+            if (isSoundEnabled && data.result === 'WIN' && fanfareAudioRef.current) {
                 fanfareAudioRef.current.currentTime = 0;
                 fanfareAudioRef.current.play().catch(() => {});
             }
@@ -317,6 +347,7 @@ const LivePicks = () => {
       } else {
         isFirstLoad.current = false;
       }
+      
       const historyData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       let winCount = 0, totalStepScore = 0, safeHitCount = 0;
       historyData.forEach(item => {
@@ -359,7 +390,7 @@ const LivePicks = () => {
         </SoundToggleBtn>
       </HeaderContainer>
 
-      {/* 통계 패널 (기존 유지) */}
+      {/* 통계 패널 */}
       <HistoryPanel>
         <div style={{textAlign:'center'}}>
             <div style={{color:'#9ca3af', marginBottom: 5, fontSize:12}}>TOTAL WIN RATE</div>
@@ -448,9 +479,6 @@ const LivePicks = () => {
             <FireOutlined className="icon" />
             <h2>Active Betting</h2>
           </SectionTitle>
-          
-          {/* 🔥 [테스트 코드] 배팅 방이 없어도 하나 강제로 보여줘서 디자인 확인 (배포 전 삭제하세요) */}
-          {/* bettingRooms.length === 0 ? ... 이 부분을 잠시 주석처리하고 아래처럼 더미 데이터를 넣어보셔도 됩니다. */}
           
           {bettingRooms.length === 0 ? (
              <div style={{textAlign:'center', color:'#4b5563', padding: 20}}>현재 진행 중인 배팅이 없습니다.</div>
