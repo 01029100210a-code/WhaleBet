@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Row, Col, Card, Statistic, Tag, Radio, List, Avatar, Spin, DatePicker, Button, Badge } from 'antd';
-import { RiseOutlined, RobotOutlined, SyncOutlined, DollarOutlined, HistoryOutlined, CheckCircleOutlined, CloseCircleOutlined, FireFilled } from '@ant-design/icons';
+import { RiseOutlined, RobotOutlined, SyncOutlined, DollarOutlined, HistoryOutlined, CheckCircleOutlined, CloseCircleOutlined } from '@ant-design/icons';
 import styled, { keyframes } from 'styled-components';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { collection, query, where, orderBy, onSnapshot, Timestamp } from "firebase/firestore";
@@ -27,7 +27,7 @@ const BotSelector = styled(Radio.Group)`
   .bot-desc { font-size: 11px; opacity: 0.8; font-weight: normal; }
 `;
 
-// 깜빡이는 애니메이션 (NEW 뱃지용)
+// NEW 뱃지 애니메이션
 const blink = keyframes` 0% { opacity: 1; } 50% { opacity: 0.4; } 100% { opacity: 1; } `;
 const NewBadge = styled(Tag)`
   animation: ${blink} 1.5s infinite; font-weight: bold; border: none; margin-right: 8px;
@@ -41,11 +41,11 @@ const LogItem = styled(List.Item)`
 
 // --- 봇 전략 정의 ---
 const BOT_STRATEGIES = [
-    { id: 1, name: 'Bot 1 (1단 5% 고정)', desc: '1단계 픽만 50만원 고정배팅', steps: [1], type: 'FIXED' },
-    { id: 2, name: 'Bot 2 (1~4단 시스템)', desc: '330만 분할 시스템 (안전형)', steps: [1,2,3,4], type: 'SYSTEM' },
-    { id: 3, name: 'Bot 3 (2~6단 시스템)', desc: '2단계 진입 ~ 6단 마감', steps: [2,3,4,5,6], type: 'SYSTEM' },
-    { id: 4, name: 'Bot 4 (3~6단 시스템)', desc: '3단계 진입 ~ 6단 마감', steps: [3,4,5,6], type: 'SYSTEM' },
-    { id: 5, name: 'Bot 5 (4~6단 고위험)', desc: '4단계 진입 ~ 6단 마감', steps: [4,5,6], type: 'SYSTEM' },
+    { id: 1, name: 'Bot 1 (1단 5% 고정)', desc: '1단계 픽만 50만원 고정배팅', type: 'FIXED' },
+    { id: 2, name: 'Bot 2 (1~4단 시스템)', desc: '330만 분할 시스템 (안전형)', min: 1, max: 4, type: 'SYSTEM' },
+    { id: 3, name: 'Bot 3 (2~6단 시스템)', desc: '2단계 진입 ~ 6단 마감', min: 2, max: 6, type: 'SYSTEM' },
+    { id: 4, name: 'Bot 4 (3~6단 시스템)', desc: '3단계 진입 ~ 6단 마감', min: 3, max: 6, type: 'SYSTEM' },
+    { id: 5, name: 'Bot 5 (4~6단 고위험)', desc: '4단계 진입 ~ 6단 마감', min: 4, max: 6, type: 'SYSTEM' },
 ];
 
 const AutoSolutionPage = () => {
@@ -56,35 +56,30 @@ const AutoSolutionPage = () => {
 
   const [chartData, setChartData] = useState([]);
   const [currentBalance, setCurrentBalance] = useState(10000000);
-  const [latestLogs, setLatestLogs] = useState([]); // 최신 10개 로그
+  const [latestLogs, setLatestLogs] = useState([]); 
   const [winRate, setWinRate] = useState(0);
   const [todayProfit, setTodayProfit] = useState(0);
   const [totalTrades, setTotalTrades] = useState(0);
 
   const startBalance = 10000000;
 
-  // 1. 데이터 가져오기 (정확한 날짜/시간 필터링)
   useEffect(() => {
     setLoading(true);
-    
-    // 선택한 날짜의 00:00:00 ~ 23:59:59 타임스탬프 구하기
     const startOfDay = selectedDate.startOf('day').toDate();
     const endOfDay = selectedDate.endOf('day').toDate();
     
     const startTs = Timestamp.fromDate(startOfDay);
     const endTs = Timestamp.fromDate(endOfDay);
 
-    // created_at 기준으로 정확히 쿼리 (시간순 정렬)
     const q = query(
         collection(db, "game_history"),
         where("created_at", ">=", startTs),
         where("created_at", "<=", endTs),
-        orderBy("created_at", "asc") // 계산을 위해 오름차순(과거->미래) 정렬 필수
+        orderBy("created_at", "asc")
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
         const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        // console.log(`🔥 [${selectedDate.format('YYYY-MM-DD')}] 데이터: ${docs.length}건 로드됨`);
         setRawData(docs);
         setLoading(false);
     });
@@ -92,12 +87,12 @@ const AutoSolutionPage = () => {
     return () => unsubscribe();
   }, [selectedDate]); 
 
-  // 2. 시뮬레이션 계산 로직
   useEffect(() => {
     if (loading) return;
     calculateBotPerformance(activeBotId, rawData);
   }, [activeBotId, rawData, loading]);
 
+  // 🔥 [핵심 로직 수정] DB 결과를 기반으로 역산하여 수익/손실 계산
   const calculateBotPerformance = (botId, data) => {
     const strategy = BOT_STRATEGIES.find(b => b.id === botId);
     let balance = startBalance;
@@ -105,52 +100,72 @@ const AutoSolutionPage = () => {
     let betCount = 0;
     const logs = [];
 
-    // 차트용 데이터 초기화 (0시부터 현재까지)
     const isToday = selectedDate.isSame(dayjs(), 'day');
     const currentHour = isToday ? new Date().getHours() : 23;
     const hourlyData = {};
     for (let i = 0; i <= currentHour; i++) hourlyData[i] = startBalance;
 
-    // 데이터 순회 (과거 -> 미래 순)
     data.forEach(game => {
-        // 데이터 정제
         const step = parseInt(game.step, 10); 
         const resultRaw = (game.result || "").trim().toUpperCase(); 
         
-        // 날짜 파싱
         let gameTime = new Date();
-        if (game.created_at && game.created_at.toDate) {
-            gameTime = game.created_at.toDate();
-        }
+        if (game.created_at && game.created_at.toDate) gameTime = game.created_at.toDate();
         const hour = gameTime.getHours();
         const timeStr = dayjs(gameTime).format('HH:mm');
 
         let change = 0;
         let isBetting = false;
+        let betResult = ''; // WIN or LOSE
 
-        // [Bot 1] 1단계 고정
+        // =================================================================
+        // 🔴 1번 봇: 1단계 고정 배팅 (50만원)
+        // =================================================================
         if (strategy.type === 'FIXED') {
-            if (step === 1) {
+            // DB에 '1단계 WIN'으로 적혀있으면 -> 성공 (+50만)
+            if (step === 1 && resultRaw === 'WIN') {
                 isBetting = true;
-                if (resultRaw === 'WIN') change = 500000;
-                else change = -500000;
+                change = 500000;
+                betResult = 'WIN';
+            }
+            // DB에 '2단계' 이상이거나 '1단계 LOSE'면 -> 1단계에서 틀렸다는 뜻 -> 실패 (-50만)
+            else if (step > 1 || (step === 1 && resultRaw !== 'WIN')) {
+                isBetting = true;
+                change = -500000;
+                betResult = 'LOSE';
             }
         } 
-        // [Bot 2~5] 시스템 배팅
+        // =================================================================
+        // 🔴 2~5번 봇: 시스템 배팅 (구간별 분할)
+        // =================================================================
         else {
-            const minStep = strategy.steps[0];
-            const maxStep = strategy.steps[strategy.steps.length - 1];
+            const min = strategy.min;
+            const max = strategy.max;
 
-            // 범위 내 적중 (수익)
-            if (step >= minStep && step <= maxStep && resultRaw === 'WIN') {
+            // 1. 적중 케이스: 내 설정 구간(min~max) 안에서 WIN이 떴을 때
+            if (step >= min && step <= max && resultRaw === 'WIN') {
                 isBetting = true;
-                change = 150000; 
+                change = 150000; // 시스템 성공 시 평균 수익
+                betResult = 'WIN';
             }
-            // 시스템 파산 (마지막 단계 패배)
-            // 🔥 [중요] LOSS, LOSE, FAIL 등 패배 키워드 확실히 체크
-            else if (step === maxStep && ['LOSE', 'LOSS', 'FAIL'].some(key => resultRaw.includes(key))) {
-                isBetting = true;
-                change = -3300000; 
+            // 2. 패배 케이스 (시스템 터짐):
+            //    - 내 설정 구간의 마지막 단계(max)에서 졌거나,
+            //    - 이미 max 단계를 넘어서 결과가 나왔다면 (시스템 이미 터짐)
+            else if (step >= max && (step > max || resultRaw !== 'WIN')) {
+                // 단, 중복 집계를 방지하기 위해 정확히 max단계 패배 or max+1단계 이상일 때만 1회 처리
+                // (여기서는 단순화하여 해당 판이 시스템 파산에 해당하는지만 체크)
+                if (step === max && resultRaw !== 'WIN') {
+                    isBetting = true;
+                    change = -3300000; // 시드머니 손실
+                    betResult = 'LOSE';
+                }
+                // 만약 DB에 5단계 WIN이라고 적혀있는데, 나는 4단계 마감(Bot 2)이라면?
+                // -> 4단계에서 이미 틀리고 5단계로 간 것이므로 '패배' 처리해야 함.
+                else if (step > max) {
+                     isBetting = true;
+                     change = -3300000;
+                     betResult = 'LOSE';
+                }
             }
         }
 
@@ -161,16 +176,15 @@ const AutoSolutionPage = () => {
 
             logs.push({
                 id: game.id,
-                timestamp: dayjs(gameTime), // 비교용 객체
+                timestamp: dayjs(gameTime),
                 time: timeStr,
                 room: game.room_name,
-                result: change > 0 ? 'WIN' : 'LOSE',
+                result: betResult,
                 change: change,
                 balance: balance
             });
         }
 
-        // 시간별 잔고 (덮어쓰기 -> 해당 시간의 최종 잔고가 됨)
         if (hour <= currentHour) hourlyData[hour] = balance;
     });
 
@@ -185,7 +199,7 @@ const AutoSolutionPage = () => {
     setTodayProfit(balance - startBalance);
     setTotalTrades(betCount);
     setWinRate(betCount === 0 ? 0 : Math.round((wins / betCount) * 100));
-    setLatestLogs(logs.reverse().slice(0, 10)); // 최신 10개만
+    setLatestLogs(logs.reverse()); // 최신순 
   };
 
   return (
@@ -200,7 +214,6 @@ const AutoSolutionPage = () => {
             <p style={{color:'#94a3b8', marginTop: 5}}>실시간 DB 데이터를 기반으로 각 전략별 수익을 시뮬레이션합니다. (00시 자동 초기화)</p>
          </div>
          
-         {/* 날짜 선택기 */}
          <div>
              <span style={{color:'#94a3b8', marginRight: 10}}>Date:</span>
              <DatePicker 
@@ -212,7 +225,6 @@ const AutoSolutionPage = () => {
          </div>
       </div>
 
-      {/* 1. 봇 선택기 */}
       <BotSelector value={activeBotId} onChange={(e) => setActiveBotId(e.target.value)}>
           {BOT_STRATEGIES.map(bot => (
               <Radio.Button key={bot.id} value={bot.id}>
@@ -222,7 +234,6 @@ const AutoSolutionPage = () => {
           ))}
       </BotSelector>
 
-      {/* 2. 상단 상태 카드 */}
       <Row gutter={[16, 16]} style={{marginBottom: 20}}>
           <Col xs={24} md={6}>
             <StatusCard>
@@ -274,7 +285,6 @@ const AutoSolutionPage = () => {
       </Row>
 
       <Row gutter={24}>
-          {/* 3. 차트 */}
           <Col xs={24} lg={16}>
               <Card 
                 title={<span style={{color:'white'}}><RiseOutlined /> Profit Trend Graph ({selectedDate.format('MM-DD')})</span>} 
@@ -317,10 +327,9 @@ const AutoSolutionPage = () => {
               </Card>
           </Col>
 
-          {/* 4. Real-time Activity (최신 10개 + NEW 뱃지) */}
           <Col xs={24} lg={8}>
               <Card 
-                title={<span style={{color:'white'}}><HistoryOutlined /> Real-time Activity</span>} 
+                title={<span style={{color:'white'}}><HistoryOutlined /> {selectedDate.isSame(dayjs(), 'day') ? "Real-time Activity" : "Past History"}</span>} 
                 bordered={false} 
                 style={{background:'#111827', border:'1px solid #374151', height:'100%', marginTop: window.innerWidth < 992 ? 20 : 0}}
                 bodyStyle={{padding: 0}}
@@ -331,7 +340,6 @@ const AutoSolutionPage = () => {
                             itemLayout="horizontal"
                             dataSource={latestLogs}
                             renderItem={item => {
-                                // 3분 이내 데이터는 NEW 표시
                                 const isNew = item.timestamp.diff(dayjs(), 'minute') > -3;
                                 return (
                                     <LogItem>
