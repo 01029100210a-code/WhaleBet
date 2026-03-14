@@ -3,7 +3,8 @@ import { Form, Input, Button, message, Row, Col, Statistic, Card, Typography, Ta
 import { 
   UserOutlined, LockOutlined, TrophyOutlined, FireOutlined, AimOutlined, 
   ThunderboltOutlined, SendOutlined, GlobalOutlined, HistoryOutlined,
-  IdcardOutlined, PhoneOutlined, BarcodeOutlined, ReadOutlined, SafetyCertificateOutlined, MailOutlined, KeyOutlined
+  IdcardOutlined, PhoneOutlined, BarcodeOutlined, ReadOutlined, SafetyCertificateOutlined, MailOutlined, KeyOutlined,
+  CheckCircleOutlined, InfoCircleOutlined, RobotOutlined, SettingOutlined
 } from '@ant-design/icons';
 import styled, { keyframes, createGlobalStyle } from 'styled-components';
 import { collection, query, orderBy, limit, onSnapshot, doc, getDoc, updateDoc, setDoc, Timestamp } from "firebase/firestore";
@@ -480,43 +481,95 @@ const Login = () => {
             </div>
         </Modal>
 
-        {/* 4. 이용 가이드 모달 */}
+        {/* 4. 이용 가이드 모달 (실제 기능 설명으로 업데이트됨) */}
         <Modal 
-            title={<span style={{color:'white'}}><ReadOutlined /> WhaleBet 이용 가이드</span>} 
+            title={<span style={{color:'white', fontSize: 18, fontWeight:'bold'}}><ReadOutlined /> WhaleBet User Guide</span>} 
             open={isGuideModalVisible} 
             onCancel={() => setIsGuideModalVisible(false)} 
             footer={null} 
-            width={800}
+            width={750}
             centered
         >
-            <div style={{maxHeight:'60vh', overflowY:'auto', paddingRight: 5}}>
+            <div style={{maxHeight:'65vh', overflowY:'auto', paddingRight: 8}}>
+                
                 <Alert 
-                    message="Global Service" 
-                    description="WhaleBet은 전 세계 어디서나 이용 가능한 AI 분석 플랫폼입니다." 
+                    message="WhaleBet 2.0 AI System" 
+                    description="실시간 바카라 패턴 분석 및 텔레그램 자동 알림 시스템입니다. 전략 설정과 알림 연동 방법을 확인하세요." 
                     type="info" 
                     showIcon 
-                    style={{background:'#f1f5f9', border:'1px solid #1e40af', marginBottom: 20}}
+                    icon={<InfoCircleOutlined style={{color:'#3b82f6'}} />}
+                    style={{background:'rgba(59, 130, 246, 0.1)', border:'1px solid #1e40af', marginBottom: 25}}
                 />
                 
-                <h3 style={{color:'white', borderBottom:'1px solid #334155', paddingBottom:10}}>1. 로그인 및 대시보드 접속</h3>
-                <p style={{color:'#e2e8f0', lineHeight: 1.6}}>
-                    발급받은 아이디로 로그인하면 실시간 분석 대시보드에 접속할 수 있습니다.<br/>
-                    메인 화면에서는 현재 승률, 총 점수 등 AI 분석 데이터를 한눈에 확인할 수 있습니다.
-                </p>
-                <div style={{width:'100%', height: 200, background:'#0f172a', borderRadius:8, display:'flex', alignItems:'center', justifyContent:'center', color:'#64748b', marginBottom: 30, border:'1px dashed #334155'}}>
-                    [이용방법 이미지 1]
+                {/* --- Step 1: 전략 설정 --- */}
+                <div style={{marginBottom: 35}}>
+                    <h3 style={{color:'white', fontSize: 16, borderLeft: '4px solid #10b981', paddingLeft: 10, marginBottom: 15}}>
+                        1. 진입 단계 설정 (Entry Strategy)
+                    </h3>
+                    <p style={{color:'#94a3b8', fontSize: 13, marginBottom: 15, lineHeight: 1.6}}>
+                        [전략 설정] 메뉴에서 원하는 진입 단계를 선택하세요. 단계가 높을수록 <b>리스크는 낮아지지만 배팅 기회는 줄어듭니다.</b>
+                    </p>
+                    
+                    {/* [가상 UI] 전략 버튼 예시 */}
+                    <div style={{background:'#111827', padding: '15px', borderRadius: 8, border:'1px dashed #374151', display:'flex', gap: 10, flexWrap:'wrap'}}>
+                        <div style={{flex:1, minWidth:150, background:'rgba(16, 185, 129, 0.1)', border:'1px solid #10b981', borderRadius:6, padding:10}}>
+                            <div style={{color:'#10b981', fontWeight:'bold', fontSize:13}}>1단계 진입 (공격형)</div>
+                            <div style={{color:'#6b7280', fontSize:11}}>모든 픽을 알림받습니다.</div>
+                        </div>
+                        <div style={{flex:1, minWidth:150, background:'#1f2937', border:'1px solid #374151', borderRadius:6, padding:10}}>
+                            <div style={{color:'white', fontWeight:'bold', fontSize:13}}>4단계 진입 (신중형)</div>
+                            <div style={{color:'#6b7280', fontSize:11}}>3연패 구간 이후 진입합니다.</div>
+                        </div>
+                    </div>
                 </div>
 
-                <h3 style={{color:'white', borderBottom:'1px solid #334155', paddingBottom:10}}>2. AI 픽 확인 및 배팅</h3>
-                <p style={{color:'#e2e8f0', lineHeight: 1.6}}>
-                    실시간으로 제공되는 AI의 확률 분석을 참고하여 전략적인 배팅을 진행하세요.<br/>
-                    Telegram 알림 연동을 통해 놓치지 않고 정보를 받을 수 있습니다.
-                </p>
-                <div style={{width:'100%', height: 200, background:'#0f172a', borderRadius:8, display:'flex', alignItems:'center', justifyContent:'center', color:'#64748b', marginBottom: 20, border:'1px dashed #334155'}}>
-                    [이용방법 이미지 2]
+                {/* --- Step 2: 텔레그램 연동 --- */}
+                <div style={{marginBottom: 35}}>
+                    <h3 style={{color:'white', fontSize: 16, borderLeft: '4px solid #3b82f6', paddingLeft: 10, marginBottom: 15}}>
+                        2. 텔레그램 알림 연동 (Telegram Connect)
+                    </h3>
+                    <p style={{color:'#94a3b8', fontSize: 13, marginBottom: 20, lineHeight: 1.6}}>
+                        설정한 단계의 픽이 나오면 텔레그램으로 즉시 메시지를 보내드립니다.<br/>
+                        연동을 위해 <b>Chat ID</b>를 설정 페이지에 입력해야 합니다.
+                    </p>
+
+                    <div style={{background:'#1e3a8a', padding: '20px', borderRadius: 8, color:'white', border:'1px solid #2563eb'}}>
+                        <div style={{display:'flex', gap: 15, alignItems:'flex-start', marginBottom: 15}}>
+                            <div style={{background:'#3b82f6', width:24, height:24, borderRadius:'50%', textAlign:'center', fontWeight:'bold', lineHeight:'24px'}}>1</div>
+                            <div>
+                                <div style={{fontWeight:'bold', fontSize:14}}>텔레그램에서 ID 확인하기</div>
+                                <div style={{fontSize:12, color:'#bfdbfe'}}>
+                                    텔레그램 검색창에 <Tag color="blue">@userinfobot</Tag>을 검색하고<br/>
+                                    [시작] 버튼을 누르면 숫자로 된 ID가 나옵니다.
+                                </div>
+                            </div>
+                        </div>
+                        <div style={{display:'flex', gap: 15, alignItems:'flex-start', marginBottom: 15}}>
+                            <div style={{background:'#3b82f6', width:24, height:24, borderRadius:'50%', textAlign:'center', fontWeight:'bold', lineHeight:'24px'}}>2</div>
+                            <div>
+                                <div style={{fontWeight:'bold', fontSize:14}}>설정 페이지에 입력</div>
+                                <div style={{fontSize:12, color:'#bfdbfe'}}>
+                                    확인한 ID를 [전략 설정] 페이지 하단 <b>YOUR CHAT ID</b> 칸에 입력하세요.
+                                </div>
+                            </div>
+                        </div>
+                        <div style={{display:'flex', gap: 15, alignItems:'flex-start'}}>
+                            <div style={{background:'#3b82f6', width:24, height:24, borderRadius:'50%', textAlign:'center', fontWeight:'bold', lineHeight:'24px'}}>3</div>
+                            <div>
+                                <div style={{fontWeight:'bold', fontSize:14}}>저장 및 알림 수신</div>
+                                <div style={{fontSize:12, color:'#bfdbfe'}}>
+                                    [알림 활성화] 스위치를 켜고 저장하면 연동이 완료됩니다.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                
-                <Button block onClick={() => setIsGuideModalVisible(false)} style={{fontWeight:'bold'}}>닫기</Button>
+
+                <div style={{textAlign:'center', marginTop: 30}}>
+                    <Button type="primary" size="large" onClick={() => setIsGuideModalVisible(false)} style={{width: 200, fontWeight:'bold', background:'#3b82f6'}}>
+                        확인 완료 (Close)
+                    </Button>
+                </div>
             </div>
         </Modal>
 
