@@ -82,6 +82,7 @@ const reservationData = Array.from({ length: 30 }, (_, i) => ({ id: `user${Math.
 
 const Login = () => {
   const navigate = useNavigate();
+  const [form] = Form.useForm(); // 🔥 [추가] 폼 인스턴스 생성 (자동 입력을 위해 필요)
   const [loading, setLoading] = useState(false);
   
   // 모달 상태
@@ -92,9 +93,9 @@ const Login = () => {
 
   // 이메일 인증 관련 상태
   const [emailForDemo, setEmailForDemo] = useState('');
-  const [verificationCode, setVerificationCode] = useState(''); // 사용자가 입력한 코드
-  const [serverCode, setServerCode] = useState(null); // 서버(시뮬레이션)에서 발송한 코드
-  const [isCodeSent, setIsCodeSent] = useState(false); // 코드 발송 여부
+  const [verificationCode, setVerificationCode] = useState(''); 
+  const [serverCode, setServerCode] = useState(null); 
+  const [isCodeSent, setIsCodeSent] = useState(false); 
 
   const [stats, setStats] = useState({ winRate: 0, totalScore: 0, streak: 0, safetyHit: 0 });
   const [recentHistory, setRecentHistory] = useState([]);
@@ -177,26 +178,22 @@ const Login = () => {
 
   // --- [이메일 인증 및 데모 생성 로직] ---
 
-  // 1. 인증번호 발송 (시뮬레이션)
   const handleSendCode = () => {
     if (!emailForDemo || !emailForDemo.includes('@')) {
         message.error("올바른 이메일 주소를 입력해주세요.");
         return;
     }
-    // 랜덤 6자리 코드 생성
     const code = Math.floor(100000 + Math.random() * 900000).toString();
     setServerCode(code);
     setIsCodeSent(true);
     
-    // 🔥 실제로는 여기서 백엔드 API를 호출해 이메일을 보내야 합니다.
-    // 현재는 데모이므로 alert로 코드를 알려줍니다.
+    // 🔥 [수정됨] 문구 단순화
     setTimeout(() => {
-        alert(`[WhaleBet Demo System]\n\n인증번호: ${code}\n\n(실제 서비스에서는 이 코드가 이메일로 전송됩니다.)`);
+        alert(`[WhaleBet Demo System]\n\n인증번호: ${code}`);
     }, 500);
-    message.success("인증번호가 발송되었습니다. 메일함을 확인하세요.");
+    message.success("인증번호가 발송되었습니다.");
   };
 
-  // 2. 코드 검증 및 계정 생성
   const handleVerifyAndCreate = async () => {
     if (verificationCode !== serverCode) {
         message.error("인증번호가 일치하지 않습니다.");
@@ -225,20 +222,30 @@ const Login = () => {
             strategyLevel: 1
         });
 
-        // 결과 저장 및 모달 전환
         setGeneratedAccount({ id: randomId, pw: randomPw, expiry: expiryDate.toLocaleTimeString(), email: emailForDemo });
-        setIsDemoModalVisible(false); // 입력창 닫기
+        setIsDemoModalVisible(false); 
         
-        // 상태 초기화
         setServerCode(null);
         setIsCodeSent(false);
         setVerificationCode('');
         setEmailForDemo('');
 
-        // 🚨 여기서도 실제로는 이메일로 ID/PW를 보내주는 API 호출이 필요함
     } catch (e) {
         console.error(e);
         message.error("데모 계정 생성 실패");
+    }
+  };
+
+  // 🔥 [추가] 확인 버튼 누르면 폼 자동 입력 및 닫기
+  const handleAutoFillAndClose = () => {
+    if (generatedAccount) {
+        // antd form 인스턴스로 값 설정
+        form.setFieldsValue({
+            username: generatedAccount.id,
+            password: generatedAccount.pw
+        });
+        message.success("로그인 정보가 입력되었습니다.");
+        setGeneratedAccount(null);
     }
   };
 
@@ -301,7 +308,8 @@ const Login = () => {
                     <Title level={3} style={{color:'white', margin:0, fontWeight: 800}}>MEMBER LOGIN</Title>
                     <Text style={{color:'#64748b', fontSize: 13}}>Access your personal AI dashboard</Text>
                   </div>
-                  <Form name="login" onFinish={onFinish} layout="vertical">
+                  {/* 🔥 [수정됨] form 인스턴스 연결 */}
+                  <Form name="login" form={form} onFinish={onFinish} layout="vertical">
                     <Form.Item name="username" rules={[{ required: true }]}><Input prefix={<UserOutlined />} placeholder="Username" size="large" style={{background:'#1e293b', border:'1px solid #334155'}} /></Form.Item>
                     <Form.Item name="password" rules={[{ required: true }]}><Input.Password prefix={<LockOutlined />} placeholder="Password" size="large" style={{background:'#1e293b', border:'1px solid #334155'}} /></Form.Item>
                     <Form.Item><Button type="primary" htmlType="submit" loading={loading} block size="large" style={{height: 50, fontWeight: 'bold', fontSize: 16}}>LOG IN NOW</Button></Form.Item>
@@ -421,29 +429,41 @@ const Login = () => {
                         >
                             인증 확인 및 데모 계정 생성
                         </Button>
-                        <Text style={{display:'block', marginTop:10, color:'#94a3b8', fontSize:12, textAlign:'center'}}>
-                            * 인증번호가 오지 않으면 스팸메일함을 확인해주세요.
-                        </Text>
                     </>
                 )}
             </Form>
         </Modal>
 
-        {/* 3. 데모 계정 발급 완료 모달 */}
+        {/* 3. 데모 계정 발급 완료 모달 (수정됨) */}
         <Modal open={!!generatedAccount} onCancel={() => setGeneratedAccount(null)} footer={null} centered closable={false}>
             <div style={{textAlign:'center', padding: 20}}>
                 <SafetyCertificateOutlined style={{fontSize: 40, color: '#10b981', marginBottom: 15}} />
                 <h2 style={{color:'white', margin:0}}>데모 계정 생성 완료!</h2>
+                
+                {/* 🔥 [수정됨] 문구 단순화 및 시뮬레이션 텍스트 제거 */}
                 <Alert 
                     message="이메일 전송 완료" 
-                    description={`ID와 비밀번호가 ${generatedAccount?.email}로 전송되었습니다. (시뮬레이션)`}
+                    description={`ID와 비밀번호가 ${generatedAccount?.email}로 전송되었습니다.`}
                     type="success" 
                     showIcon 
                     style={{margin: '20px 0', textAlign:'left'}}
                 />
                 
+                {/* 🔥 [수정됨] 강조 박스 디자인 */}
+                <div style={{
+                    background: 'rgba(251, 191, 36, 0.1)', 
+                    border: '2px solid #fbbf24', 
+                    borderRadius: '8px', 
+                    padding: '15px', 
+                    margin: '0 0 20px 0',
+                    textAlign: 'center'
+                }}>
+                    <Text style={{color:'#fbbf24', fontSize:16, fontWeight: 'bold'}}>
+                        ⚠ 잊어버리지 않게 따로 저장해두세요!
+                    </Text>
+                </div>
+
                 <div style={{background:'#0f172a', padding: 20, borderRadius: 8, border:'1px solid #334155', textAlign:'left'}}>
-                    <Text style={{color:'#94a3b8', fontSize:12, display:'block', marginBottom:10}}>잊어버리지 않게 따로 저장해두세요!</Text>
                     <div style={{marginBottom: 10, display:'flex', justifyContent:'space-between'}}>
                         <span style={{color:'#64748b'}}>아이디:</span>
                         <span style={{color:'#d4af37', fontWeight:'bold', fontSize: 18}}>{generatedAccount?.id}</span>
@@ -459,13 +479,14 @@ const Login = () => {
                     </div>
                 </div>
 
-                <Button type="primary" block style={{marginTop: 20}} onClick={() => setGeneratedAccount(null)}>
+                {/* 🔥 [수정됨] 클릭 시 자동 입력 함수 실행 */}
+                <Button type="primary" block style={{marginTop: 20, height: 45, fontSize: 15, fontWeight:'bold'}} onClick={handleAutoFillAndClose}>
                     확인 (로그인하러 가기)
                 </Button>
             </div>
         </Modal>
 
-        {/* 4. 이용 가이드 모달 (텍스트 컬러 수정됨) */}
+        {/* 4. 이용 가이드 모달 */}
         <Modal 
             title={<span style={{color:'white'}}><ReadOutlined /> WhaleBet 이용 가이드</span>} 
             open={isGuideModalVisible} 
