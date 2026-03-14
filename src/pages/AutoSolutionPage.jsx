@@ -2,13 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { Row, Col, Card, Statistic, Tag, Radio, List, Avatar, Spin, DatePicker, Button, Badge } from 'antd';
 import { RiseOutlined, RobotOutlined, SyncOutlined, DollarOutlined, HistoryOutlined, CheckCircleOutlined, CloseCircleOutlined } from '@ant-design/icons';
 import styled, { keyframes } from 'styled-components';
+// 🔥 [수정] AreaChart 등을 ResponsiveContainer 안에서 안전하게 렌더링
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { collection, query, where, orderBy, onSnapshot, Timestamp } from "firebase/firestore";
 import { db } from '../firebase';
 import { useNavigate } from 'react-router-dom'; 
 import dayjs from 'dayjs';
 
-// --- 스타일 정의 ---
 const PageContainer = styled.div` padding: 20px; background: transparent; height: 100%; color: white; overflow-y: auto; `;
 const StatusCard = styled.div` background: #1f2937; border: 1px solid #374151; border-radius: 12px; padding: 20px; text-align: center; height: 100%; transition: 0.3s; &:hover { border-color: #d4af37; } display: flex; flex-direction: column; justify-content: center; `;
 
@@ -39,7 +39,6 @@ const LogItem = styled(List.Item)`
   &:hover { background: rgba(255,255,255,0.05); }
 `;
 
-// --- 봇 전략 정의 ---
 const BOT_STRATEGIES = [
     { id: 1, name: 'Bot 1 (1단 5% 고정)', desc: '1단계 픽만 50만원 고정배팅', type: 'FIXED' },
     { id: 2, name: 'Bot 2 (1~4단 시스템)', desc: '330만 분할 시스템 (안전형)', min: 1, max: 4, type: 'SYSTEM' },
@@ -48,7 +47,7 @@ const BOT_STRATEGIES = [
     { id: 5, name: 'Bot 5 (4~6단 고위험)', desc: '4단계 진입 ~ 6단 마감', min: 4, max: 6, type: 'SYSTEM' },
 ];
 
-// 🔥 [중요] 시작 날짜 설정 (이 날짜 이전 데이터는 무시/선택 불가)
+// 3/14일 기준
 const START_DATE = dayjs('2024-03-14'); 
 
 const AutoSolutionPage = () => {
@@ -67,9 +66,7 @@ const AutoSolutionPage = () => {
 
   const startBalance = 10000000;
 
-  // 1. 데이터 가져오기
   useEffect(() => {
-    // 🔥 만약 선택된 날짜가 3/14 이전이면 강제로 데이터 비우고 종료
     if (selectedDate.isBefore(START_DATE, 'day')) {
         setRawData([]);
         setLoading(false);
@@ -77,10 +74,8 @@ const AutoSolutionPage = () => {
     }
 
     setLoading(true);
-    
     const startOfDay = selectedDate.startOf('day').toDate();
     const endOfDay = selectedDate.endOf('day').toDate();
-    
     const startTs = Timestamp.fromDate(startOfDay);
     const endTs = Timestamp.fromDate(endOfDay);
 
@@ -100,7 +95,6 @@ const AutoSolutionPage = () => {
     return () => unsubscribe();
   }, [selectedDate]); 
 
-  // 2. 시뮬레이션 계산
   useEffect(() => {
     if (loading) return;
     calculateBotPerformance(activeBotId, rawData);
@@ -131,7 +125,6 @@ const AutoSolutionPage = () => {
         let isBetting = false;
         let betResult = ''; 
 
-        // Bot 1
         if (strategy.type === 'FIXED') {
             if (step === 1 && resultRaw === 'WIN') {
                 isBetting = true;
@@ -144,7 +137,6 @@ const AutoSolutionPage = () => {
                 betResult = 'LOSE';
             }
         } 
-        // Bot 2~5
         else {
             const min = strategy.min;
             const max = strategy.max;
@@ -205,7 +197,6 @@ const AutoSolutionPage = () => {
       window.location.reload(); 
   };
 
-  // 🔥 [NEW] 날짜 비활성화 함수 (3/14 이전 선택 불가)
   const disabledDate = (current) => {
     return current && current < START_DATE.startOf('day');
   };
@@ -228,7 +219,7 @@ const AutoSolutionPage = () => {
                 value={selectedDate} 
                 onChange={(date) => setSelectedDate(date || dayjs())} 
                 allowClear={false}
-                disabledDate={disabledDate} // 🔥 날짜 선택 제한 적용
+                disabledDate={disabledDate} 
                 style={{background:'#1f2937', border:'1px solid #374151', color:'white'}} 
              />
          </div>
@@ -300,8 +291,9 @@ const AutoSolutionPage = () => {
                 bordered={false} 
                 style={{background:'#1f2937', border:'1px solid #374151', minHeight: 450}}
               >
-                  <div style={{height: 380, width: '100%'}}>
-                    <ResponsiveContainer>
+                  {/* 🔥 [수정] 높이 100%와 minHeight 지정으로 오류 해결 */}
+                  <div style={{width: '100%', height: 380, minHeight: 380}}>
+                    <ResponsiveContainer width="100%" height="100%">
                         <AreaChart data={chartData}>
                             <defs>
                                 <linearGradient id="colorBalance" x1="0" y1="0" x2="0" y2="1">
