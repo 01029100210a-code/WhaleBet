@@ -3,7 +3,7 @@ import { Form, Input, Button, message, Row, Col, Statistic, Card, Typography, Ta
 import { 
   UserOutlined, LockOutlined, TrophyOutlined, FireOutlined, AimOutlined, 
   ThunderboltOutlined, SendOutlined, GlobalOutlined, HistoryOutlined,
-  IdcardOutlined, PhoneOutlined, BarcodeOutlined, ReadOutlined, SafetyCertificateOutlined
+  IdcardOutlined, PhoneOutlined, BarcodeOutlined, ReadOutlined, SafetyCertificateOutlined, MailOutlined, KeyOutlined
 } from '@ant-design/icons';
 import styled, { keyframes, createGlobalStyle } from 'styled-components';
 import { collection, query, orderBy, limit, onSnapshot, doc, getDoc, updateDoc, setDoc, Timestamp } from "firebase/firestore";
@@ -11,7 +11,7 @@ import { db } from '../firebase';
 import { useNavigate } from 'react-router-dom';
 import bcrypt from 'bcryptjs';
 
-const { Title, Text, Paragraph } = Typography;
+const { Title, Text } = Typography;
 const ADMIN_TELEGRAM_URL = "https://t.me/whalebet_admin"; 
 
 // --- 애니메이션 ---
@@ -46,6 +46,7 @@ const GlobalStyle = createGlobalStyle`
   .ant-modal-content {
     background: #1e293b !important;
     border: 1px solid #334155;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.8);
   }
   .ant-modal-header {
     background: transparent !important;
@@ -57,6 +58,9 @@ const GlobalStyle = createGlobalStyle`
   .ant-modal-close {
     color: white !important;
   }
+  /* Alert 컴포넌트 텍스트 강제 화이트 처리 */
+  .ant-alert-message { color: #1e293b !important; font-weight: bold; }
+  .ant-alert-description { color: #334155 !important; }
 `;
 
 const Container = styled.div` min-height: 100vh; display: flex; flex-direction: column; background: radial-gradient(circle at 50% 10%, #1e293b 0%, #0b0e14 100%); overflow-x: hidden; position: relative; `;
@@ -68,102 +72,29 @@ const StatItem = styled.div` text-align: center; padding: 15px 30px; background:
 const LoginCard = styled(Card)` width: 100%; max-width: 400px; background: rgba(30, 41, 59, 0.7); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 16px; backdrop-filter: blur(20px); box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5); animation: ${glow} 3s infinite; .ant-input-affix-wrapper { background: rgba(0, 0, 0, 0.3); border-color: rgba(255, 255, 255, 0.1); color: white; padding: 12px; } input { background: transparent; color: white; } .ant-btn-primary { height: 45px; font-weight: bold; background: linear-gradient(135deg, #d4af37 0%, #f59e0b 100%); border: none; &:hover { opacity: 0.9; transform: scale(1.02); } } `;
 const IntroSection = styled.div` color: white; animation: ${float} 6s ease-in-out infinite; h1 { font-size: 48px; font-weight: 900; margin-bottom: 20px; } p { font-size: 16px; color: #94a3b8; margin-bottom: 30px; } `;
 
-// 결과 테이블 래퍼 (오른쪽 배치)
-const ResultTableWrapper = styled.div` 
-  width: 100%; 
-  height: 100%;
-  min-height: 400px;
-  background: #111827; 
-  border-radius: 12px; 
-  padding: 25px; 
-  border: 1px solid #1f293b;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+const ResultTableWrapper = styled.div` width: 100%; height: 100%; min-height: 400px; background: #111827; border-radius: 12px; padding: 25px; border: 1px solid #1f293b; box-shadow: 0 10px 30px rgba(0,0,0,0.3); h3 { color: white; margin-bottom: 20px; font-size: 14px; font-weight: bold; display: flex; align-items: center; gap: 8px; letter-spacing: 1px; } `;
 
-  h3 { 
-    color: white; 
-    margin-bottom: 20px; 
-    font-size: 14px; 
-    font-weight: bold; 
-    display: flex; 
-    align-items: center; 
-    gap: 8px;
-    letter-spacing: 1px;
-  }
-`;
-
-// 예약자 위젯 (왼쪽 배치 - fixed 제거됨)
-const ReservationWidget = styled.div` 
-  width: 100%; 
-  height: 100%;
-  min-height: 400px; /* 테이블과 높이 맞추기 */
-  background: #0f172a; 
-  border: 1px solid #1e293b; 
-  border-top: 4px solid #10b981; 
-  border-radius: 8px; 
-  padding: 20px; 
-  overflow: hidden; 
-  box-shadow: 0 10px 30px rgba(0,0,0,0.3);
-
-  /* 헤더 */
-  .header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 20px;
-    border-bottom: 1px solid #1e293b;
-    padding-bottom: 10px;
-  }
-
-  h4 { 
-    color: #10b981; 
-    margin: 0; 
-    font-size: 12px; 
-    font-weight: 800; 
-    text-transform: uppercase; 
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
-  
-  .list-container {
-    height: 320px; /* 내부 스크롤 높이 */
-    overflow: hidden;
-    position: relative;
-  }
-  
-  .scroll-content {
-    animation: ${scrollVertical} 40s linear infinite;
-  }
-  
-  .item { 
-    display: flex; 
-    justify-content: space-between; 
-    padding: 8px 0; 
-    font-size: 12px; 
-    font-family: 'Monaco', monospace; 
-    align-items: center;
-    border-bottom: 1px solid rgba(255,255,255,0.03);
-  }
-
-  .user { color: #60a5fa; }
-  .action { color: #10b981; }
-  .time { color: #475569; font-size: 11px; }
-`;
+const ReservationWidget = styled.div` width: 100%; height: 100%; min-height: 400px; background: #0f172a; border: 1px solid #1e293b; border-top: 4px solid #10b981; border-radius: 8px; padding: 20px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.3); .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid #1e293b; padding-bottom: 10px; } h4 { color: #10b981; margin: 0; font-size: 12px; font-weight: 800; text-transform: uppercase; display: flex; align-items: center; gap: 6px; } .list-container { height: 320px; overflow: hidden; position: relative; } .scroll-content { animation: ${scrollVertical} 40s linear infinite; } .item { display: flex; justify-content: space-between; padding: 8px 0; font-size: 12px; font-family: 'Monaco', monospace; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.03); } .user { color: #60a5fa; } .action { color: #10b981; } .time { color: #475569; font-size: 11px; } `;
 
 const Footer = styled.div` padding: 40px; background: #05070a; border-top: 1px solid #1e293b; text-align: center; color: #475569; font-size: 12px; `;
 
-// 더미 데이터
 const reservationData = Array.from({ length: 30 }, (_, i) => ({ id: `user${Math.floor(Math.random() * 900) + 100}***`, time: `${Math.floor(Math.random() * 59) + 1}m ago`, action: 'Reserved AI Access' }));
 
 const Login = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   
-  // 모달 상태 관리
+  // 모달 상태
   const [isJoinModalVisible, setIsJoinModalVisible] = useState(false); 
-  const [isDemoModalVisible, setIsDemoModalVisible] = useState(false); // 데모 신청 모달
-  const [isGuideModalVisible, setIsGuideModalVisible] = useState(false); // 이용가이드 모달
-  const [generatedAccount, setGeneratedAccount] = useState(null); // 생성된 데모 계정 정보
+  const [isDemoModalVisible, setIsDemoModalVisible] = useState(false);
+  const [isGuideModalVisible, setIsGuideModalVisible] = useState(false);
+  const [generatedAccount, setGeneratedAccount] = useState(null);
+
+  // 이메일 인증 관련 상태
+  const [emailForDemo, setEmailForDemo] = useState('');
+  const [verificationCode, setVerificationCode] = useState(''); // 사용자가 입력한 코드
+  const [serverCode, setServerCode] = useState(null); // 서버(시뮬레이션)에서 발송한 코드
+  const [isCodeSent, setIsCodeSent] = useState(false); // 코드 발송 여부
 
   const [stats, setStats] = useState({ winRate: 0, totalScore: 0, streak: 0, safetyHit: 0 });
   const [recentHistory, setRecentHistory] = useState([]);
@@ -174,7 +105,7 @@ const Login = () => {
     const q = query(collection(db, "game_history"), orderBy("created_at", "desc"), limit(100));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map(doc => doc.data());
-      setRecentHistory(data.slice(0, 5)); // 테이블엔 5개만
+      setRecentHistory(data.slice(0, 5));
       const todayData = data.filter(item => item.created_at && (item.created_at.seconds * 1000) >= startOfDay);
       const winCount = todayData.filter(d => d.result === 'WIN').length;
       setStats({
@@ -187,21 +118,20 @@ const Login = () => {
     return () => unsubscribe();
   }, []);
 
-  // 로그인 로직 (데모 계정 만료 체크 추가)
+  // 로그인 로직
   const onFinish = async (values) => {
     setLoading(true);
     try {
       const userRef = doc(db, "users", values.username);
       const userSnap = await getDoc(userRef);
       if (!userSnap.exists()) { message.error("존재하지 않는 아이디입니다."); setLoading(false); return; }
-      
       const userData = userSnap.data();
 
-      // [추가] 데모 계정 만료 체크
+      // 만료 체크
       if (userData.expiryDate) {
         const expiry = userData.expiryDate.toDate();
         if (new Date() > expiry) {
-          message.error("만료된 데모 계정입니다. 정식 가입을 이용해주세요.");
+          message.error("만료된 데모 계정입니다.");
           setLoading(false);
           return;
         }
@@ -229,7 +159,6 @@ const Login = () => {
     setLoading(false);
   };
 
-  // 회원가입 로직
   const onJoin = async (values) => {
     try {
         const userRef = doc(db, "users", values.username);
@@ -246,44 +175,73 @@ const Login = () => {
     } catch (e) { message.error("가입 실패"); }
   };
 
-  // [신규 기능] 데모 계정 생성 로직
-  const handleCreateDemo = async (values) => {
+  // --- [이메일 인증 및 데모 생성 로직] ---
+
+  // 1. 인증번호 발송 (시뮬레이션)
+  const handleSendCode = () => {
+    if (!emailForDemo || !emailForDemo.includes('@')) {
+        message.error("올바른 이메일 주소를 입력해주세요.");
+        return;
+    }
+    // 랜덤 6자리 코드 생성
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    setServerCode(code);
+    setIsCodeSent(true);
+    
+    // 🔥 실제로는 여기서 백엔드 API를 호출해 이메일을 보내야 합니다.
+    // 현재는 데모이므로 alert로 코드를 알려줍니다.
+    setTimeout(() => {
+        alert(`[WhaleBet Demo System]\n\n인증번호: ${code}\n\n(실제 서비스에서는 이 코드가 이메일로 전송됩니다.)`);
+    }, 500);
+    message.success("인증번호가 발송되었습니다. 메일함을 확인하세요.");
+  };
+
+  // 2. 코드 검증 및 계정 생성
+  const handleVerifyAndCreate = async () => {
+    if (verificationCode !== serverCode) {
+        message.error("인증번호가 일치하지 않습니다.");
+        return;
+    }
+
     try {
-        // 랜덤 ID/PW 생성
         const randomId = `demo${Math.floor(1000 + Math.random() * 9000)}`;
-        const randomPw = Math.random().toString(36).slice(-6); // 6자리 랜덤 비번
-        
-        // 3시간 후 만료 시간 설정
+        const randomPw = Math.random().toString(36).slice(-6); 
         const expiryDate = new Date();
         expiryDate.setHours(expiryDate.getHours() + 3);
 
         const salt = bcrypt.genSaltSync(10);
         const hashedPassword = bcrypt.hashSync(randomPw, salt);
 
-        // Firestore에 저장
         await setDoc(doc(db, "users", randomId), {
             username: randomId,
             password: hashedPassword,
-            name: `체험고객-${values.phone.slice(-4)}`,
-            phone: values.phone,
+            name: `체험고객-${randomId.slice(-4)}`,
+            email: emailForDemo,
             role: 'demo',
             createdAt: Timestamp.now(),
-            expiryDate: Timestamp.fromDate(expiryDate), // 만료일 설정
+            expiryDate: Timestamp.fromDate(expiryDate),
             isBlocked: false,
-            isApproved: true, // 데모는 즉시 승인
+            isApproved: true,
             strategyLevel: 1
         });
 
-        // 결과 보여주기
-        setGeneratedAccount({ id: randomId, pw: randomPw, expiry: expiryDate.toLocaleTimeString() });
-        setIsDemoModalVisible(false);
+        // 결과 저장 및 모달 전환
+        setGeneratedAccount({ id: randomId, pw: randomPw, expiry: expiryDate.toLocaleTimeString(), email: emailForDemo });
+        setIsDemoModalVisible(false); // 입력창 닫기
+        
+        // 상태 초기화
+        setServerCode(null);
+        setIsCodeSent(false);
+        setVerificationCode('');
+        setEmailForDemo('');
+
+        // 🚨 여기서도 실제로는 이메일로 ID/PW를 보내주는 API 호출이 필요함
     } catch (e) {
         console.error(e);
         message.error("데모 계정 생성 실패");
     }
   };
 
-  // 테이블 컬럼
   const columns = [
     { title: 'Time', dataIndex: 'created_at', width: 100, render: (ts) => <span style={{color:'#64748b'}}>{ts ? new Date(ts.seconds * 1000).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '-'}</span> },
     { title: 'Room', dataIndex: 'room_name', render: (text) => <span style={{color:'white', fontWeight:'600'}}>{text}</span> },
@@ -317,7 +275,6 @@ const Login = () => {
                   <h1>Unlock the Future of <br/><span style={{color:'#d4af37'}}>Data-Driven</span> Betting.</h1>
                   <p>Experience the power of WhaleBet's real-time pattern recognition algorithm. We provide accurate probability statistics and automated Telegram alerts to maximize your winning potential.</p>
                   
-                  {/* 버튼 영역 수정 */}
                   <div style={{display:'flex', gap: 15}}>
                     <Button 
                         size="large" 
@@ -357,9 +314,7 @@ const Login = () => {
               </Col>
             </Row>
 
-            {/* 🔥 [수정됨] 하단 섹션: 왼쪽(예약자) / 오른쪽(결과테이블) */}
             <Row gutter={30} style={{marginTop: 60}}>
-                {/* 1. 예약자 목록 위젯 (왼쪽 배치) */}
                 <Col xs={24} md={8}>
                     <ReservationWidget>
                         <div className="header">
@@ -380,7 +335,6 @@ const Login = () => {
                     </ReservationWidget>
                 </Col>
 
-                {/* 2. 결과 테이블 (오른쪽 배치) */}
                 <Col xs={24} md={16}>
                     <ResultTableWrapper>
                         <h3><HistoryOutlined /> LIVE RECENT RESULTS</h3>
@@ -398,8 +352,6 @@ const Login = () => {
           </div>
         </ContentWrapper>
 
-        {/* --- [모달 영역] --- */}
-
         {/* 1. 회원가입 모달 */}
         <Modal title="회원가입 신청" open={isJoinModalVisible} onCancel={() => setIsJoinModalVisible(false)} footer={null}>
             <Form layout="vertical" onFinish={onJoin}>
@@ -414,23 +366,66 @@ const Login = () => {
             </Form>
         </Modal>
 
-        {/* 2. 데모 신청 모달 (View Demo) */}
-        <Modal title={<span style={{color:'white'}}><SafetyCertificateOutlined /> 3시간 무료 체험 신청</span>} open={isDemoModalVisible} onCancel={() => setIsDemoModalVisible(false)} footer={null} centered>
-            <p style={{color:'#94a3b8', marginBottom:20}}>
-                본인 인증(휴대폰 번호) 후 즉시 이용 가능한 데모 아이디가 발급됩니다.<br/>
-                데모 계정은 발급 후 3시간 뒤 자동으로 만료/차단됩니다.
+        {/* 2. 데모 신청 모달 (이메일 인증 방식) */}
+        <Modal 
+            title={<span style={{color:'white'}}><MailOutlined /> 이메일 인증 및 체험 신청</span>} 
+            open={isDemoModalVisible} 
+            onCancel={() => { setIsDemoModalVisible(false); setIsCodeSent(false); setVerificationCode(''); }} 
+            footer={null} 
+            centered
+        >
+            <p style={{color:'#cbd5e1', marginBottom:20, fontSize:13}}>
+                사용 중인 이메일을 입력하시면 인증번호가 발송됩니다.<br/>
+                인증 완료 시 3시간 동안 사용 가능한 데모 계정이 발급됩니다.
             </p>
-            <Form layout="vertical" onFinish={handleCreateDemo}>
-                <Form.Item 
-                    name="phone" 
-                    label={<span style={{color:'white'}}>휴대폰 번호</span>}
-                    rules={[{ required: true, message: '휴대폰 번호를 입력해주세요' }]}
-                >
-                    <Input placeholder="01012345678" prefix={<PhoneOutlined />} style={{background:'#0f172a', border:'1px solid #334155', color:'white'}} />
+            
+            <Form layout="vertical">
+                {/* 이메일 입력 */}
+                <Form.Item label={<span style={{color:'white'}}>이메일 주소</span>} style={{marginBottom: 10}}>
+                    <div style={{display:'flex', gap: 10}}>
+                        <Input 
+                            placeholder="example@email.com" 
+                            prefix={<MailOutlined />} 
+                            value={emailForDemo}
+                            onChange={(e) => setEmailForDemo(e.target.value)}
+                            disabled={isCodeSent}
+                            style={{background:'#0f172a', border:'1px solid #334155', color:'white'}} 
+                        />
+                        <Button 
+                            onClick={handleSendCode} 
+                            disabled={isCodeSent}
+                            style={{background: isCodeSent ? '#334155' : '#3b82f6', color:'white', border:'none'}}
+                        >
+                            {isCodeSent ? '발송됨' : '인증번호 발송'}
+                        </Button>
+                    </div>
                 </Form.Item>
-                <Button type="primary" htmlType="submit" block style={{height:40, fontWeight:'bold', background:'#10b981', border:'none'}}>
-                    인증하고 데모 아이디 발급받기
-                </Button>
+
+                {/* 인증번호 입력 (코드가 발송되면 표시됨) */}
+                {isCodeSent && (
+                    <>
+                        <Form.Item label={<span style={{color:'white'}}>인증번호 입력</span>} style={{marginTop: 20}}>
+                            <Input 
+                                placeholder="6자리 코드 입력" 
+                                prefix={<KeyOutlined />} 
+                                value={verificationCode}
+                                onChange={(e) => setVerificationCode(e.target.value)}
+                                style={{background:'#0f172a', border:'1px solid #334155', color:'white'}} 
+                            />
+                        </Form.Item>
+                        <Button 
+                            type="primary" 
+                            block 
+                            style={{height:45, fontWeight:'bold', background:'#10b981', border:'none', marginTop: 10}}
+                            onClick={handleVerifyAndCreate}
+                        >
+                            인증 확인 및 데모 계정 생성
+                        </Button>
+                        <Text style={{display:'block', marginTop:10, color:'#94a3b8', fontSize:12, textAlign:'center'}}>
+                            * 인증번호가 오지 않으면 스팸메일함을 확인해주세요.
+                        </Text>
+                    </>
+                )}
             </Form>
         </Modal>
 
@@ -438,10 +433,17 @@ const Login = () => {
         <Modal open={!!generatedAccount} onCancel={() => setGeneratedAccount(null)} footer={null} centered closable={false}>
             <div style={{textAlign:'center', padding: 20}}>
                 <SafetyCertificateOutlined style={{fontSize: 40, color: '#10b981', marginBottom: 15}} />
-                <h2 style={{color:'white', margin:0}}>데모 계정 발급 완료</h2>
-                <p style={{color:'#94a3b8', margin:'10px 0 20px'}}>아래 정보를 사용하여 로그인하세요.</p>
+                <h2 style={{color:'white', margin:0}}>데모 계정 생성 완료!</h2>
+                <Alert 
+                    message="이메일 전송 완료" 
+                    description={`ID와 비밀번호가 ${generatedAccount?.email}로 전송되었습니다. (시뮬레이션)`}
+                    type="success" 
+                    showIcon 
+                    style={{margin: '20px 0', textAlign:'left'}}
+                />
                 
                 <div style={{background:'#0f172a', padding: 20, borderRadius: 8, border:'1px solid #334155', textAlign:'left'}}>
+                    <Text style={{color:'#94a3b8', fontSize:12, display:'block', marginBottom:10}}>잊어버리지 않게 따로 저장해두세요!</Text>
                     <div style={{marginBottom: 10, display:'flex', justifyContent:'space-between'}}>
                         <span style={{color:'#64748b'}}>아이디:</span>
                         <span style={{color:'#d4af37', fontWeight:'bold', fontSize: 18}}>{generatedAccount?.id}</span>
@@ -463,7 +465,7 @@ const Login = () => {
             </div>
         </Modal>
 
-        {/* 4. 이용 가이드 모달 (Global Service) */}
+        {/* 4. 이용 가이드 모달 (텍스트 컬러 수정됨) */}
         <Modal 
             title={<span style={{color:'white'}}><ReadOutlined /> WhaleBet 이용 가이드</span>} 
             open={isGuideModalVisible} 
@@ -478,28 +480,28 @@ const Login = () => {
                     description="WhaleBet은 전 세계 어디서나 이용 가능한 AI 분석 플랫폼입니다." 
                     type="info" 
                     showIcon 
-                    style={{background:'#0f172a', border:'1px solid #1e40af', marginBottom: 20}}
+                    style={{background:'#f1f5f9', border:'1px solid #1e40af', marginBottom: 20}}
                 />
                 
                 <h3 style={{color:'white', borderBottom:'1px solid #334155', paddingBottom:10}}>1. 로그인 및 대시보드 접속</h3>
-                <p style={{color:'#94a3b8'}}>
+                <p style={{color:'#e2e8f0', lineHeight: 1.6}}>
                     발급받은 아이디로 로그인하면 실시간 분석 대시보드에 접속할 수 있습니다.<br/>
-                    (이미지 예시 공간)
+                    메인 화면에서는 현재 승률, 총 점수 등 AI 분석 데이터를 한눈에 확인할 수 있습니다.
                 </p>
-                <div style={{width:'100%', height: 200, background:'#0f172a', borderRadius:8, display:'flex', alignItems:'center', justifyContent:'center', color:'#475569', marginBottom: 30, border:'1px dashed #334155'}}>
+                <div style={{width:'100%', height: 200, background:'#0f172a', borderRadius:8, display:'flex', alignItems:'center', justifyContent:'center', color:'#64748b', marginBottom: 30, border:'1px dashed #334155'}}>
                     [이용방법 이미지 1]
                 </div>
 
                 <h3 style={{color:'white', borderBottom:'1px solid #334155', paddingBottom:10}}>2. AI 픽 확인 및 배팅</h3>
-                <p style={{color:'#94a3b8'}}>
+                <p style={{color:'#e2e8f0', lineHeight: 1.6}}>
                     실시간으로 제공되는 AI의 확률 분석을 참고하여 전략적인 배팅을 진행하세요.<br/>
                     Telegram 알림 연동을 통해 놓치지 않고 정보를 받을 수 있습니다.
                 </p>
-                <div style={{width:'100%', height: 200, background:'#0f172a', borderRadius:8, display:'flex', alignItems:'center', justifyContent:'center', color:'#475569', marginBottom: 20, border:'1px dashed #334155'}}>
+                <div style={{width:'100%', height: 200, background:'#0f172a', borderRadius:8, display:'flex', alignItems:'center', justifyContent:'center', color:'#64748b', marginBottom: 20, border:'1px dashed #334155'}}>
                     [이용방법 이미지 2]
                 </div>
                 
-                <Button block onClick={() => setIsGuideModalVisible(false)}>닫기</Button>
+                <Button block onClick={() => setIsGuideModalVisible(false)} style={{fontWeight:'bold'}}>닫기</Button>
             </div>
         </Modal>
 
