@@ -3,7 +3,7 @@ import { Row, Col, Card, Statistic, Tag, Radio, List, Avatar, Spin, Badge, Butto
 import { RiseOutlined, FallOutlined, RobotOutlined, SyncOutlined, DollarOutlined, HistoryOutlined, CheckCircleOutlined, CloseCircleOutlined } from '@ant-design/icons';
 import styled, { keyframes } from 'styled-components';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
-import { collection, query, where, orderBy, onSnapshot, Timestamp } from "firebase/firestore";
+import { collection, query, orderBy, onSnapshot, where } from "firebase/firestore";
 import { db } from '../firebase';
 import dayjs from 'dayjs';
 
@@ -11,7 +11,7 @@ import dayjs from 'dayjs';
 const PageContainer = styled.div` padding: 20px; background: transparent; height: 100%; color: white; overflow-y: auto; `;
 const StatusCard = styled.div` background: #1f2937; border: 1px solid #374151; border-radius: 12px; padding: 20px; text-align: center; height: 100%; transition: 0.3s; &:hover { border-color: #d4af37; } display: flex; flex-direction: column; justify-content: center; `;
 
-// 버튼 스타일 개선 (높이 확보 및 정렬)
+// 버튼 스타일 개선
 const BotSelector = styled(Radio.Group)`
   width: 100%; display: flex; gap: 10px; margin-bottom: 30px;
   .ant-radio-button-wrapper {
@@ -57,20 +57,21 @@ const AutoSolutionPage = () => {
 
   const startBalance = 10000000;
 
-  // 1. 데이터 가져오기 (DB 실시간 연동)
+  // 1. 데이터 가져오기 (DB 실시간 연동 - 문자열 날짜 매칭 방식)
   useEffect(() => {
-    const startOfToday = new Date();
-    startOfToday.setHours(0, 0, 0, 0);
-    const startTimestamp = Timestamp.fromDate(startOfToday);
+    // 크롤러가 저장하는 날짜 형식 (YYYY-MM-DD)
+    const todayStr = dayjs().format('YYYY-MM-DD');
 
+    // 쿼리 수정: 날짜 문자열로 필터링
     const q = query(
         collection(db, "game_history"),
-        where("created_at", ">=", startTimestamp),
+        where("date", "==", todayStr), // 🔥 문자열 비교로 변경
         orderBy("created_at", "asc")
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
         const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        console.log("🔥 불러온 데이터 개수:", docs.length); // 디버깅용
         setRawData(docs);
         setLoading(false);
     });
@@ -96,10 +97,17 @@ const AutoSolutionPage = () => {
     for (let i = 0; i <= currentHour; i++) hourlyData[i] = startBalance;
 
     data.forEach(game => {
-        const step = parseInt(game.step, 10); // 숫자 변환 안전장치
-        const result = game.result?.toUpperCase(); // 대소문자 통일
-        const hour = game.created_at.toDate().getHours();
-        const timeStr = dayjs(game.created_at.toDate()).format('HH:mm');
+        // 🔥 데이터 정제 (크롤러가 저장한 값과 매칭)
+        const step = parseInt(game.step, 10); 
+        const resultRaw = (game.result || "").trim().toUpperCase(); 
+        
+        // 시간 파싱 (Firestore Timestamp -> Date)
+        let gameTime = new Date();
+        if (game.created_at && game.created_at.toDate) {
+            gameTime = game.created_at.toDate();
+        }
+        const hour = gameTime.getHours();
+        const timeStr = dayjs(gameTime).format('HH:mm');
 
         let change = 0;
         let isBetting = false;
@@ -108,7 +116,7 @@ const AutoSolutionPage = () => {
         if (strategy.type === 'FIXED') {
             if (step === 1) {
                 isBetting = true;
-                if (result === 'WIN') change = 500000;
+                if (resultRaw === 'WIN') change = 500000;
                 else change = -500000;
             }
         } 
@@ -117,12 +125,13 @@ const AutoSolutionPage = () => {
             const minStep = strategy.steps[0];
             const maxStep = strategy.steps[strategy.steps.length - 1];
 
-            if (step >= minStep && step <= maxStep && result === 'WIN') {
+            // 범위 내 적중 (수익 발생)
+            if (step >= minStep && step <= maxStep && resultRaw === 'WIN') {
                 isBetting = true;
                 change = 150000; 
             }
-            // 패배 조건 강화 (LOSE, LOSS, Lose 모두 체크)
-            else if (step === maxStep && ['LOSE', 'LOSS'].includes(result)) {
+            // 범위 끝에서 패배 (시스템 파산) - LOSS, LOSE, LOSS_ALL 등 모두 체크
+            else if (step === maxStep && (resultRaw.includes('LOSS') || resultRaw.includes('LOSE'))) {
                 isBetting = true;
                 change = -3300000; 
             }
@@ -145,6 +154,7 @@ const AutoSolutionPage = () => {
         if (hour <= currentHour) hourlyData[hour] = balance;
     });
 
+    // 차트 데이터 포맷팅
     const formattedChart = Object.keys(hourlyData).map(h => ({
         time: `${h}:00`,
         balance: hourlyData[h]
@@ -169,7 +179,7 @@ const AutoSolutionPage = () => {
          <p style={{color:'#94a3b8', marginTop: 5}}>실시간 DB 데이터를 기반으로 각 전략별 수익을 시뮬레이션합니다. (매일 00시 초기화)</p>
       </div>
 
-      {/* 1. 봇 선택기 (UI 개선됨) */}
+      {/* 1. 봇 선택기 */}
       <BotSelector value={activeBotId} onChange={(e) => setActiveBotId(e.target.value)}>
           {BOT_STRATEGIES.map(bot => (
               <Radio.Button key={bot.id} value={bot.id}>
