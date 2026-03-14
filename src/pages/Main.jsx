@@ -3,7 +3,7 @@ import { Layout, Menu, Button, Modal, Tag } from 'antd';
 import { 
   DesktopOutlined, GiftOutlined, LogoutOutlined, CrownOutlined, 
   SettingOutlined, UserOutlined, LockOutlined, SoundOutlined, 
-  CustomerServiceOutlined, CalendarOutlined, RobotOutlined 
+  CustomerServiceOutlined, CalendarOutlined, RobotOutlined, TrophyOutlined // 🔥 TrophyOutlined 아이콘 추가됨
 } from '@ant-design/icons';
 import { doc, onSnapshot, updateDoc, Timestamp } from "firebase/firestore";
 import { db } from '../firebase'; 
@@ -18,10 +18,11 @@ import MyPage from './MyPage';
 import Settings from './Settings'; 
 import Admin from './Admin';
 import Notice from './Notice';
-
-// 🔥🔥 새로 만든 페이지 임포트
 import AttendancePage from './AttendancePage';
 import AutoSolutionPage from './AutoSolutionPage';
+
+// 🔥🔥 [NEW] 새로 만든 파일 임포트
+import SportsPicks from './SportsPicks'; 
 
 const { Header, Content, Sider } = Layout;
 
@@ -161,9 +162,12 @@ const Main = () => {
         >
           <Menu.Item key="1" icon={<DesktopOutlined />}>실시간 픽 (Live)</Menu.Item>
           
-          {/* 🔥 [수정] 메뉴 이름 변경 (LiveBot) */}
+          {/* 🔥 Auto 솔루션 메뉴 */}
           <Menu.Item key="auto" icon={<RobotOutlined style={{color: '#22d3ee'}} />}>Auto 솔루션 (LiveBot)</Menu.Item>
           
+          {/* 🔥🔥 [NEW] 스포츠 픽 메뉴 추가 */}
+          <Menu.Item key="sports" icon={<TrophyOutlined style={{color: '#fcd34d'}} />}>스포츠 픽 (Premium)</Menu.Item>
+
           <Menu.Item key="notice" icon={<SoundOutlined style={{color:'#f59e0b'}} />}>공지사항</Menu.Item>
           <Menu.Item key="attendance" icon={<CalendarOutlined style={{color: '#10b981'}} />}>출석체크 (Event)</Menu.Item>
           <Menu.Item key="2" icon={<GiftOutlined />}>룰렛 게임 (Event)</Menu.Item>
@@ -217,6 +221,10 @@ const Main = () => {
           )}
 
           {selectedKey === 'auto' && <AutoSolutionPage />}
+          
+          {/* 🔥🔥 [NEW] 스포츠 픽 화면 연결 */}
+          {selectedKey === 'sports' && <SportsPicks />}
+          
           {selectedKey === 'notice' && <Notice user={userData} />}
           {selectedKey === 'attendance' && <AttendancePage />}
           {selectedKey === '2' && <RouletteGame user={userData} />}
