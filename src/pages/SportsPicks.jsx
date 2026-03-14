@@ -33,36 +33,36 @@ const ImageContainer = styled.div`
   position: relative;
   margin-bottom: 15px;
   border-radius: 8px;
-  overflow: hidden; /* 자식 요소가 둥근 모서리를 넘지 않도록 */
+  overflow: hidden; 
 `;
 
-// 🔥 [핵심 수정] 하단 전체를 덮는 띠(Banner) 형태로 변경
+// 🔥 [핵심 수정] 높이를 75px로 대폭 늘림 (기존 45px -> 75px)
 const LogoOverlay = styled.div`
   position: absolute;
   bottom: 0;
   left: 0;
-  width: 100%;  /* 가로 전체 꽉 차게 */
-  height: 45px; /* 로고를 가리기에 충분한 높이 */
-  background: #000000; /* 완전 검정 (비침 없음) */
+  width: 100%;  
+  height: 75px; /* 🔥 높이를 키워서 위쪽 로고까지 확실히 덮음 */
+  background: #000000; 
   
   display: flex;
-  justify-content: center; /* 텍스트 중앙 정렬 */
+  justify-content: center; 
   align-items: center;
   
-  color: #d4af37; /* 금색 텍스트 */
+  color: #d4af37; 
   font-weight: 900;
-  font-size: 16px;
-  letter-spacing: 1.5px;
+  font-size: 18px; /* 글씨도 조금 더 키움 */
+  letter-spacing: 2px;
   
-  border-top: 2px solid #d4af37; /* 상단에 금색 선을 넣어 디자인처럼 보이게 함 */
+  border-top: 3px solid #d4af37; /* 상단 금색 선도 조금 더 두껍게 */
   z-index: 10;
   
-  /* 아이콘 추가 */
+  /* 아이콘 */
   &::before {
     content: "♛"; 
-    font-size: 18px;
-    margin-right: 8px;
-    margin-bottom: 2px;
+    font-size: 22px;
+    margin-right: 10px;
+    margin-bottom: 4px;
   }
 `;
 
@@ -115,7 +115,7 @@ const SportsPicks = () => {
 
                       {item.image && (
                           <ImageContainer>
-                              {/* 이미지 클릭 방지 (preview={false}) */}
+                              {/* 이미지 클릭 및 드래그 방지 */}
                               <Image 
                                 src={item.image} 
                                 alt="analysis" 
@@ -124,11 +124,11 @@ const SportsPicks = () => {
                                     width: '100%', 
                                     objectFit:'cover', 
                                     display:'block',
-                                    pointerEvents: 'none' // 마우스 동작 차단
+                                    pointerEvents: 'none'
                                 }} 
                               />
                               
-                              {/* 🔥 하단 전체를 가리는 블랙 배너 */}
+                              {/* 🔥 두꺼워진 하단 배너 */}
                               <LogoOverlay>
                                 WB SPORTS AI PREMIUM
                               </LogoOverlay>
