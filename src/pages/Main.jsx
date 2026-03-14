@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Layout, Menu, Button, Modal, Tag, Typography } from 'antd';
+import { Layout, Menu, Button, Modal, Tag } from 'antd';
 import { 
   DesktopOutlined, GiftOutlined, LogoutOutlined, CrownOutlined, 
   SettingOutlined, UserOutlined, LockOutlined, SoundOutlined, 
-  CustomerServiceOutlined, CalendarOutlined, RobotOutlined // 🔥 [NEW] 아이콘 추가
+  CustomerServiceOutlined, CalendarOutlined, RobotOutlined 
 } from '@ant-design/icons';
 import { doc, onSnapshot, updateDoc, Timestamp } from "firebase/firestore";
 import { db } from '../firebase'; 
@@ -19,7 +19,7 @@ import Settings from './Settings';
 import Admin from './Admin';
 import Notice from './Notice';
 
-// 🔥🔥 [NEW] 새로 만든 페이지 임포트 (파일이 생성되어 있어야 합니다)
+// 🔥🔥 새로 만든 페이지 임포트
 import AttendancePage from './AttendancePage';
 import AutoSolutionPage from './AutoSolutionPage';
 
@@ -41,7 +41,10 @@ const DarkLayout = styled(Layout)`
 const Main = () => {
   const navigate = useNavigate();
   const [collapsed, setCollapsed] = useState(false);
-  const [selectedKey, setSelectedKey] = useState('1'); 
+  
+  // 🔥 [수정] 새로고침해도 마지막 메뉴 유지 (기본값 '1')
+  const [selectedKey, setSelectedKey] = useState(localStorage.getItem('lastMenuKey') || '1'); 
+  
   const [userData, setUserData] = useState(null);
   
   const myUsername = localStorage.getItem('username');
@@ -132,6 +135,16 @@ const Main = () => {
       return `${days}일 ${hours}시간 남음`;
   };
 
+  // 🔥 메뉴 클릭 핸들러 (클릭 시 저장)
+  const handleMenuClick = (e) => {
+    if (e.key === 'telegram_cs') {
+        window.open(TELEGRAM_CS_URL, '_blank'); 
+    } else {
+        setSelectedKey(e.key);
+        localStorage.setItem('lastMenuKey', e.key); // 🔥 메뉴 키 저장
+    }
+  };
+
   return (
     <DarkLayout>
       <Sider collapsible collapsed={collapsed} onCollapse={setCollapsed} width={250}>
@@ -144,35 +157,29 @@ const Main = () => {
             defaultSelectedKeys={['1']} 
             mode="inline" 
             selectedKeys={[selectedKey]}
-            onClick={(e) => {
-                if (e.key === 'telegram_cs') {
-                    window.open(TELEGRAM_CS_URL, '_blank'); 
-                } else {
-                    setSelectedKey(e.key);
-                }
-            }}
+            onClick={handleMenuClick} // 🔥 핸들러 연결
         >
           {/* 주요 메뉴 */}
           <Menu.Item key="1" icon={<DesktopOutlined />}>실시간 픽 (Live)</Menu.Item>
           
-          {/* 🔥 [NEW] Auto 솔루션 메뉴 추가 */}
+          {/* Auto 솔루션 메뉴 */}
           <Menu.Item key="auto" icon={<RobotOutlined style={{color: '#22d3ee'}} />}>Auto 솔루션 (Bot)</Menu.Item>
           
           <Menu.Item key="notice" icon={<SoundOutlined style={{color:'#f59e0b'}} />}>공지사항</Menu.Item>
           
-          {/* 🔥 [NEW] 출석체크 메뉴 추가 */}
+          {/* 출석체크 메뉴 */}
           <Menu.Item key="attendance" icon={<CalendarOutlined style={{color: '#10b981'}} />}>출석체크 (Event)</Menu.Item>
 
           <Menu.Item key="2" icon={<GiftOutlined />}>룰렛 게임 (Event)</Menu.Item>
           <Menu.Item key="3" icon={<SettingOutlined />}>전략 설정</Menu.Item>
           <Menu.Item key="4" icon={<UserOutlined />}>마이페이지</Menu.Item>
 
-          {/* 고객센터 (텔레그램 자동연결) */}
+          {/* 고객센터 */}
           <Menu.Item key="telegram_cs" icon={<CustomerServiceOutlined style={{color: '#3b82f6'}} />}>
              <span style={{color:'#3b82f6', fontWeight:'bold'}}>관리자 문의 (텔레그램)</span>
           </Menu.Item>
 
-          {/* 관리자 메뉴 (권한 있을때만 하단 노출) */}
+          {/* 관리자 메뉴 */}
           {userData && adminRoles.includes(userData.role) && (
             <Menu.Item 
                 key="admin" 
@@ -204,7 +211,7 @@ const Main = () => {
         </Header>
         
         <Content>
-          {/* 1. 실시간 픽 (이용권 체크) */}
+          {/* 1. 실시간 픽 */}
           {selectedKey === '1' && (
               isSubscriptionValid() ? <LivePicks /> : (
                   <div style={{textAlign:'center', marginTop:100, color:'white'}}>
@@ -216,13 +223,13 @@ const Main = () => {
               )
           )}
 
-          {/* 🔥🔥 [NEW] Auto 솔루션 페이지 연결 */}
+          {/* Auto 솔루션 */}
           {selectedKey === 'auto' && <AutoSolutionPage />}
 
           {/* 2. 공지사항 */}
           {selectedKey === 'notice' && <Notice user={userData} />}
 
-          {/* 🔥🔥 [NEW] 출석체크 페이지 연결 */}
+          {/* 출석체크 */}
           {selectedKey === 'attendance' && <AttendancePage />}
 
           {/* 3. 룰렛 게임 */}

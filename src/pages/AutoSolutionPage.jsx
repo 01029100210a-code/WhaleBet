@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Row, Col, Card, Statistic, Tag, Radio, List, Avatar, Spin, Badge, Button } from 'antd'; // 🔥 Button 추가됨
+import { Row, Col, Card, Statistic, Tag, Radio, List, Avatar, Spin, Badge, Button } from 'antd';
 import { RiseOutlined, FallOutlined, RobotOutlined, SyncOutlined, DollarOutlined, HistoryOutlined, CheckCircleOutlined, CloseCircleOutlined } from '@ant-design/icons';
 import styled, { keyframes } from 'styled-components';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
@@ -9,16 +9,25 @@ import dayjs from 'dayjs';
 
 // --- 스타일 정의 ---
 const PageContainer = styled.div` padding: 20px; background: transparent; height: 100%; color: white; overflow-y: auto; `;
-const StatusCard = styled.div` background: #1f2937; border: 1px solid #374151; border-radius: 12px; padding: 20px; text-align: center; height: 100%; transition: 0.3s; &:hover { border-color: #d4af37; } `;
+const StatusCard = styled.div` background: #1f2937; border: 1px solid #374151; border-radius: 12px; padding: 20px; text-align: center; height: 100%; transition: 0.3s; &:hover { border-color: #d4af37; } display: flex; flex-direction: column; justify-content: center; `;
+
+// 버튼 스타일 개선 (높이 확보 및 정렬)
 const BotSelector = styled(Radio.Group)`
-  width: 100%; display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap;
+  width: 100%; display: flex; gap: 10px; margin-bottom: 30px;
   .ant-radio-button-wrapper {
-    flex: 1; text-align: center; background: #111827; border: 1px solid #374151; color: #94a3b8; border-radius: 8px; height: 50px; line-height: 48px; font-weight: bold;
-    &:hover { color: #d4af37; }
-    &.ant-radio-button-wrapper-checked { background: rgba(212, 175, 55, 0.2); border-color: #d4af37; color: #d4af37; box-shadow: none; }
+    flex: 1; text-align: center; background: #111827; border: 1px solid #374151; color: #94a3b8; 
+    border-radius: 8px; height: 80px; display: flex; flex-direction: column; justify-content: center; align-items: center;
+    &:hover { color: #d4af37; border-color: #d4af37; }
+    &.ant-radio-button-wrapper-checked { 
+      background: rgba(212, 175, 55, 0.1); border: 2px solid #d4af37; color: #d4af37; 
+      .bot-desc { color: #fcd34d; }
+    }
     &::before { display: none; }
   }
+  .bot-name { font-size: 14px; font-weight: bold; margin-bottom: 4px; }
+  .bot-desc { font-size: 11px; opacity: 0.8; font-weight: normal; }
 `;
+
 const slideIn = keyframes` from { transform: translateX(20px); opacity: 0; } to { transform: translateX(0); opacity: 1; } `;
 const LogItem = styled(List.Item)`
   animation: ${slideIn} 0.3s ease-out; border-bottom: 1px solid #1f2937; padding: 12px 0 !important;
@@ -36,15 +45,15 @@ const BOT_STRATEGIES = [
 
 const AutoSolutionPage = () => {
   const [loading, setLoading] = useState(true);
-  const [activeBotId, setActiveBotId] = useState(2); // 기본 2번 봇
-  const [rawData, setRawData] = useState([]); // DB 원본 데이터
+  const [activeBotId, setActiveBotId] = useState(2); 
+  const [rawData, setRawData] = useState([]); 
   
-  // 계산된 상태값
   const [chartData, setChartData] = useState([]);
   const [currentBalance, setCurrentBalance] = useState(10000000);
   const [recentLogs, setRecentLogs] = useState([]);
   const [winRate, setWinRate] = useState(0);
   const [todayProfit, setTodayProfit] = useState(0);
+  const [totalTrades, setTotalTrades] = useState(0);
 
   const startBalance = 10000000;
 
@@ -69,38 +78,33 @@ const AutoSolutionPage = () => {
     return () => unsubscribe();
   }, []);
 
-  // 2. 봇 전략 시뮬레이션 로직 (봇이 바뀔때마다 재계산)
+  // 2. 시뮬레이션 로직
   useEffect(() => {
-    if (loading || rawData.length === 0) return;
-
+    if (loading) return;
     calculateBotPerformance(activeBotId, rawData);
   }, [activeBotId, rawData, loading]);
 
-
-  // --- 🤖 핵심: 시뮬레이션 계산 함수 ---
   const calculateBotPerformance = (botId, data) => {
     const strategy = BOT_STRATEGIES.find(b => b.id === botId);
     let balance = startBalance;
     let wins = 0;
-    let totalBets = 0;
+    let betCount = 0;
     const logs = [];
 
-    // 시간별 차트 데이터 초기화 (0시~현재)
     const currentHour = new Date().getHours();
     const hourlyData = {};
     for (let i = 0; i <= currentHour; i++) hourlyData[i] = startBalance;
 
-    // 데이터 순회
     data.forEach(game => {
-        const step = game.step; // 결과가 나온 단계
-        const result = game.result; // WIN or LOSE
+        const step = parseInt(game.step, 10); // 숫자 변환 안전장치
+        const result = game.result?.toUpperCase(); // 대소문자 통일
         const hour = game.created_at.toDate().getHours();
         const timeStr = dayjs(game.created_at.toDate()).format('HH:mm');
 
         let change = 0;
         let isBetting = false;
 
-        // [Bot 1] 1단계 고정 배팅 (50만원)
+        // [Bot 1] 1단계 고정 배팅
         if (strategy.type === 'FIXED') {
             if (step === 1) {
                 isBetting = true;
@@ -108,30 +112,27 @@ const AutoSolutionPage = () => {
                 else change = -500000;
             }
         } 
-        // [Bot 2~5] 시스템 배팅 (330만원 3분할 기회)
+        // [Bot 2~5] 시스템 배팅
         else {
             const minStep = strategy.steps[0];
             const maxStep = strategy.steps[strategy.steps.length - 1];
 
-            // 범위 내 적중 (수익 발생)
             if (step >= minStep && step <= maxStep && result === 'WIN') {
                 isBetting = true;
-                change = 150000; // 1회 적중 시 평균 수익 (가정)
+                change = 150000; 
             }
-            // 범위 끝에서 패배 (시스템 파산 -330만)
-            else if (step === maxStep && (result === 'LOSE' || result === 'LOSS')) {
+            // 패배 조건 강화 (LOSE, LOSS, Lose 모두 체크)
+            else if (step === maxStep && ['LOSE', 'LOSS'].includes(result)) {
                 isBetting = true;
-                change = -3300000; // 기회비용 소멸
+                change = -3300000; 
             }
         }
 
-        // 배팅이 일어난 경우만 업데이트
         if (isBetting) {
             balance += change;
-            totalBets++;
+            betCount++;
             if (change > 0) wins++;
 
-            // 로그 추가 (최신 10개만 유지하기 위해 배열에 다 넣고 나중에 자름)
             logs.push({
                 time: timeStr,
                 room: game.room_name,
@@ -141,22 +142,20 @@ const AutoSolutionPage = () => {
             });
         }
 
-        // 시간별 데이터 갱신 (마지막 잔고 유지)
         if (hour <= currentHour) hourlyData[hour] = balance;
     });
 
-    // 차트 데이터 포맷팅
     const formattedChart = Object.keys(hourlyData).map(h => ({
         time: `${h}:00`,
         balance: hourlyData[h]
     }));
 
-    // 상태 업데이트
     setChartData(formattedChart);
     setCurrentBalance(balance);
     setTodayProfit(balance - startBalance);
-    setWinRate(totalBets === 0 ? 0 : Math.round((wins / totalBets) * 100));
-    setRecentLogs(logs.reverse().slice(0, 10)); // 최신순 10개
+    setTotalTrades(betCount);
+    setWinRate(betCount === 0 ? 0 : Math.round((wins / betCount) * 100));
+    setRecentLogs(logs.reverse().slice(0, 10));
   };
 
   return (
@@ -167,24 +166,25 @@ const AutoSolutionPage = () => {
              <RobotOutlined /> WHALE AUTO SOLUTION
              {loading && <Spin indicator={<SyncOutlined spin style={{fontSize: 20, color:'#d4af37'}} />} />}
          </h1>
+         <p style={{color:'#94a3b8', marginTop: 5}}>실시간 DB 데이터를 기반으로 각 전략별 수익을 시뮬레이션합니다. (매일 00시 초기화)</p>
       </div>
 
-      {/* 1. 봇 선택기 */}
+      {/* 1. 봇 선택기 (UI 개선됨) */}
       <BotSelector value={activeBotId} onChange={(e) => setActiveBotId(e.target.value)}>
           {BOT_STRATEGIES.map(bot => (
               <Radio.Button key={bot.id} value={bot.id}>
-                  <div>{bot.name}</div>
-                  <div style={{fontSize: 10, fontWeight:'normal', opacity: 0.7}}>{bot.desc}</div>
+                  <div className="bot-name">{bot.name}</div>
+                  <div className="bot-desc">{bot.desc}</div>
               </Radio.Button>
           ))}
       </BotSelector>
 
       {/* 2. 상단 상태 카드 */}
       <Row gutter={[16, 16]} style={{marginBottom: 20}}>
-          <Col xs={24} md={8}>
-            <StatusCard style={{background: 'linear-gradient(135deg, #1f2937 0%, #111827 100%)'}}>
+          <Col xs={24} md={6}>
+            <StatusCard>
                 <Statistic 
-                    title={<span style={{color:'#94a3b8'}}>Start Balance (00:00)</span>} 
+                    title={<span style={{color:'#94a3b8'}}>Start Balance</span>} 
                     value={startBalance} 
                     prefix={<DollarOutlined />} 
                     valueStyle={{color:'white', fontWeight:'bold'}} 
@@ -198,38 +198,38 @@ const AutoSolutionPage = () => {
                 border: currentBalance >= startBalance ? '1px solid #10b981' : '1px solid #ef4444', 
                 background: currentBalance >= startBalance ? 'rgba(16, 185, 129, 0.05)' : 'rgba(239, 68, 68, 0.05)'
             }}>
-                <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', height:'100%'}}>
-                    <div>
-                        <div style={{color:'#94a3b8', fontSize: 12}}>Current Balance</div>
-                        <div style={{fontSize: 28, fontWeight:900, color: currentBalance >= startBalance ? '#10b981' : '#ef4444'}}>
+                <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', width:'100%'}}>
+                    <div style={{textAlign:'left'}}>
+                        <div style={{color:'#94a3b8', fontSize: 12, marginBottom: 5}}>Current Balance</div>
+                        <div style={{fontSize: 26, fontWeight:900, color: currentBalance >= startBalance ? '#10b981' : '#ef4444'}}>
                             {currentBalance.toLocaleString()} P
                         </div>
                     </div>
                     <div style={{textAlign:'right'}}>
                          <Tag color={todayProfit >= 0 ? "success" : "error"} style={{fontSize: 16, padding: '5px 10px'}}>
-                            {todayProfit >= 0 ? '+' : ''}{todayProfit.toLocaleString()} P
+                            {todayProfit >= 0 ? '+' : ''}{todayProfit.toLocaleString()}
                          </Tag>
                          <div style={{fontSize: 11, marginTop: 5, color:'#94a3b8'}}>Today's Profit</div>
                     </div>
                 </div>
             </StatusCard>
           </Col>
-          <Col xs={12} md={3}>
+          <Col xs={12} md={4}>
             <StatusCard>
                 <Statistic title="Win Rate" value={winRate} suffix="%" valueStyle={{color: winRate >= 50 ? '#d4af37' : '#ef4444'}} />
-                <div style={{fontSize:10, color:'#64748b'}}>적중 확률</div>
+                <div style={{fontSize:11, color:'#64748b', marginTop: 5}}>적중 확률</div>
             </StatusCard>
           </Col>
-          <Col xs={12} md={3}>
+          <Col xs={12} md={4}>
             <StatusCard>
-                <Statistic title="Trades" value={recentLogs.length > 0 ? 'Active' : 'Wait'} valueStyle={{color:'white', fontSize: 18}} />
-                <Badge status="processing" text="Running" style={{color:'#10b981'}} />
+                <Statistic title="Trades" value={totalTrades} suffix="회" valueStyle={{color:'white'}} />
+                <div style={{fontSize:11, color:'#64748b', marginTop: 5}}>총 배팅 횟수</div>
             </StatusCard>
           </Col>
       </Row>
 
       <Row gutter={24}>
-          {/* 3. 메인 그래프 */}
+          {/* 3. 차트 */}
           <Col xs={24} lg={16}>
               <Card 
                 title={<span style={{color:'white'}}><RiseOutlined /> Profit Trend Graph</span>} 
@@ -264,7 +264,7 @@ const AutoSolutionPage = () => {
                                 fillOpacity={1} 
                                 fill="url(#colorBalance)" 
                                 strokeWidth={3}
-                                animationDuration={1000}
+                                animationDuration={500}
                             />
                         </AreaChart>
                     </ResponsiveContainer>
@@ -272,7 +272,7 @@ const AutoSolutionPage = () => {
               </Card>
           </Col>
 
-          {/* 4. 실시간 로그 (슬라이드 방식) */}
+          {/* 4. 로그 */}
           <Col xs={24} lg={8}>
               <Card 
                 title={<span style={{color:'white'}}><HistoryOutlined /> Real-time Activity</span>} 
@@ -297,10 +297,10 @@ const AutoSolutionPage = () => {
                                     description={
                                         <div style={{display:'flex', justifyContent:'space-between'}}>
                                             <span style={{color: item.result === 'WIN' ? '#10b981' : '#ef4444', fontWeight:'bold'}}>
-                                                {item.change > 0 ? '+' : ''}{item.change.toLocaleString()} P
+                                                {item.change > 0 ? '+' : ''}{item.change.toLocaleString()}
                                             </span>
                                             <span style={{color:'#94a3b8', fontSize: 12}}>
-                                                잔고: {(item.balance / 10000).toFixed(0)}만
+                                                {(item.balance / 10000).toFixed(0)}만
                                             </span>
                                         </div>
                                     }
@@ -311,11 +311,10 @@ const AutoSolutionPage = () => {
                       {recentLogs.length === 0 && (
                           <div style={{textAlign:'center', padding: 40, color:'#64748b'}}>
                               <SyncOutlined spin style={{fontSize: 24, marginBottom: 10}} />
-                              <div>배팅 대기 중...</div>
+                              <div>데이터 집계 중...</div>
                           </div>
                       )}
                   </div>
-                  
                   <div style={{padding: 15, borderTop: '1px solid #1f2937'}}>
                       <Button type="primary" block style={{background:'#d4af37', border:'none', color:'black', fontWeight:'bold', height: 40}}>
                           이 봇으로 실전 배팅하기
