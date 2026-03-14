@@ -74,6 +74,9 @@ const GlobalStyle = createGlobalStyle`
   .ant-steps-item-wait .ant-steps-item-icon { border-color: #475569 !important; }
   .ant-steps-item-finish .ant-steps-item-icon { border-color: #10b981 !important; }
   .ant-steps-item-finish .ant-steps-item-icon > .ant-steps-icon { color: #10b981 !important; }
+
+  /* Alert 메시지 커스텀 */
+  .custom-alert .ant-alert-message { color: #1e293b !important; font-weight: 800; font-size: 15px; }
 `;
 
 const Container = styled.div` min-height: 100vh; display: flex; flex-direction: column; background: radial-gradient(circle at 50% 10%, #1e293b 0%, #0b0e14 100%); overflow-x: hidden; position: relative; `;
@@ -91,10 +94,9 @@ const ReservationWidget = styled.div` width: 100%; height: 100%; min-height: 400
 
 const Footer = styled.div` padding: 40px; background: #05070a; border-top: 1px solid #1e293b; text-align: center; color: #475569; font-size: 12px; `;
 
-// 이미지 플레이스홀더 스타일 (이미지 로딩 실패 시 대비)
+// 이미지 플레이스홀더 스타일
 const GuideImageContainer = styled.div`
   width: 100%;
-  min-height: 180px;
   background: #0f172a;
   border: 1px solid #334155;
   border-radius: 8px;
@@ -113,15 +115,6 @@ const GuideImageContainer = styled.div`
   }
   
   &:hover img { transform: scale(1.02); }
-  
-  &::after {
-    content: '이미지를 불러올 수 없습니다.';
-    color: #475569;
-    font-size: 12px;
-    position: absolute;
-    z-index: 0;
-  }
-  img { z-index: 1; position: relative; }
 `;
 
 const reservationData = Array.from({ length: 30 }, (_, i) => ({ id: `user${Math.floor(Math.random() * 900) + 100}***`, time: `${Math.floor(Math.random() * 59) + 1}m ago`, action: 'Reserved AI Access' }));
@@ -174,17 +167,15 @@ const Login = () => {
       if (!userSnap.exists()) { message.error("존재하지 않는 아이디입니다."); setLoading(false); return; }
       const userData = userSnap.data();
 
-      // --- [자동 만료 체크 로직] ---
-      // 데모 계정이거나, 만료일이 있는 계정인 경우
+      // 만료 체크 로직
       if (userData.expiryDate) {
         const expiry = userData.expiryDate.toDate();
         const now = new Date();
         
         if (now > expiry) {
-          // 시간이 지났다면 DB 업데이트 (알림 차단 및 계정 차단)
           await updateDoc(userRef, {
             isBlocked: true,
-            isTelegramActive: false, // 텔레그램 알림 자동 해제
+            isTelegramActive: false, // 만료 시 텔레그램 알림 자동 차단
             blockedReason: 'Demo Expired'
           });
           
@@ -261,7 +252,7 @@ const Login = () => {
         const randomId = `demo${Math.floor(1000 + Math.random() * 9000)}`;
         const randomPw = Math.random().toString(36).slice(-6); 
         const expiryDate = new Date();
-        expiryDate.setHours(expiryDate.getHours() + 3); // 3시간 설정
+        expiryDate.setHours(expiryDate.getHours() + 3);
 
         const salt = bcrypt.genSaltSync(10);
         const hashedPassword = bcrypt.hashSync(randomPw, salt);
@@ -277,7 +268,7 @@ const Login = () => {
             isBlocked: false,
             isApproved: true,
             strategyLevel: 1,
-            isTelegramActive: false // 초기엔 비활성화
+            isTelegramActive: false
         });
 
         setGeneratedAccount({ id: randomId, pw: randomPw, expiry: expiryDate.toLocaleTimeString(), email: emailForDemo });
@@ -416,7 +407,7 @@ const Login = () => {
           </div>
         </ContentWrapper>
 
-        {/* 1. 회원가입 모달 */}
+        {/* 회원가입 모달 */}
         <Modal title="회원가입 신청" open={isJoinModalVisible} onCancel={() => setIsJoinModalVisible(false)} footer={null}>
             <Form layout="vertical" onFinish={onJoin}>
                 <Form.Item name="username" label="아이디" rules={[{ required: true }]}><Input /></Form.Item>
@@ -430,7 +421,7 @@ const Login = () => {
             </Form>
         </Modal>
 
-        {/* 2. 데모 신청 모달 (이메일 인증 방식) */}
+        {/* 데모 신청 모달 */}
         <Modal 
             title={<span style={{color:'white'}}><MailOutlined /> 이메일 인증 및 체험 신청</span>} 
             open={isDemoModalVisible} 
@@ -444,7 +435,6 @@ const Login = () => {
             </p>
             
             <Form layout="vertical">
-                {/* 이메일 입력 */}
                 <Form.Item label={<span style={{color:'white'}}>이메일 주소</span>} style={{marginBottom: 10}}>
                     <div style={{display:'flex', gap: 10}}>
                         <Input 
@@ -465,7 +455,6 @@ const Login = () => {
                     </div>
                 </Form.Item>
 
-                {/* 인증번호 입력 (코드가 발송되면 표시됨) */}
                 {isCodeSent && (
                     <>
                         <Form.Item label={<span style={{color:'white'}}>인증번호 입력</span>} style={{marginTop: 20}}>
@@ -490,7 +479,7 @@ const Login = () => {
             </Form>
         </Modal>
 
-        {/* 3. 데모 계정 발급 완료 모달 */}
+        {/* 데모 계정 생성 완료 모달 */}
         <Modal open={!!generatedAccount} onCancel={() => setGeneratedAccount(null)} footer={null} centered closable={false}>
             <div style={{textAlign:'center', padding: 20}}>
                 <SafetyCertificateOutlined style={{fontSize: 40, color: '#10b981', marginBottom: 15}} />
@@ -545,7 +534,7 @@ const Login = () => {
             open={isGuideModalVisible} 
             onCancel={() => setIsGuideModalVisible(false)} 
             footer={null} 
-            width={800}
+            width={850}
             centered
         >
             <Tabs defaultActiveKey="1" style={{color: 'white'}}>
@@ -573,19 +562,22 @@ const Login = () => {
                             <Col span={6}>
                                 <div style={{background: '#111827', padding: 10, borderRadius: 6, textAlign:'center', border:'1px solid #1f2937'}}>
                                     <div style={{color:'#f59e0b', fontWeight:'bold'}}>STREAK</div>
-                                    <div style={{color:'#64748b', fontSize:11}}>현재 연승 횟수</div>
+                                    {/* 수정된 부분: 텍스트 변경 및 가독성 개선 */}
+                                    <div style={{color:'#94a3b8', fontSize:11, fontWeight:'bold'}}>4단계 이내 승리 연승</div>
                                 </div>
                             </Col>
                             <Col span={6}>
                                 <div style={{background: '#111827', padding: 10, borderRadius: 6, textAlign:'center', border:'1px solid #1f2937'}}>
                                     <div style={{color:'#3b82f6', fontWeight:'bold'}}>SAFETY</div>
-                                    <div style={{color:'#64748b', fontSize:11}}>안전구간 적중</div>
+                                    {/* 수정된 부분: 텍스트 변경 및 가독성 개선 */}
+                                    <div style={{color:'#94a3b8', fontSize:11, fontWeight:'bold'}}>3~6단계 연승 횟수</div>
                                 </div>
                             </Col>
                         </Row>
 
                         <h3 style={{color:'#d4af37', fontSize: 16, marginBottom: 15}}>2. 메인 대시보드 화면</h3>
                         <GuideImageContainer>
+                            {/* 첨부하신 사진 파일명을 dashboard_guide.png 로 public 폴더에 넣어주세요 */}
                             <img src="/dashboard_guide.png" alt="Dashboard Preview" />
                         </GuideImageContainer>
                         <div style={{background:'rgba(255,255,255,0.05)', padding:15, borderRadius:8, fontSize:13, color:'#cbd5e1', lineHeight:1.6}}>
@@ -599,8 +591,13 @@ const Login = () => {
                 <TabPane tab={<span><RobotOutlined /> AI 로직 & 알림</span>} key="2">
                     <div style={{padding: '10px 0'}}>
                         <Alert 
+                            className="custom-alert"
                             message="AI 패턴 분석 프로세스" 
-                            description="AI는 3단계에 걸쳐 정밀하게 배팅 시점을 포착하고 알림을 전송합니다." 
+                            description={
+                                <div style={{marginTop: 5, color: 'white', fontWeight: 'bold'}}>
+                                    AI는 3단계에 걸쳐 정밀하게 배팅 시점을 포착하고 <span style={{borderBottom: '3px solid #ef4444'}}>알림을 전송합니다.</span>
+                                </div>
+                            }
                             type="info" 
                             showIcon 
                             style={{background:'#172554', border:'1px solid #1e3a8a', marginBottom: 25}}
