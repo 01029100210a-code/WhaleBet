@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Layout, Menu, Button, Modal, Tag, Typography } from 'antd';
 import { 
   DesktopOutlined, GiftOutlined, LogoutOutlined, CrownOutlined, 
-  SettingOutlined, UserOutlined, LockOutlined, SoundOutlined, CustomerServiceOutlined 
+  SettingOutlined, UserOutlined, LockOutlined, SoundOutlined, 
+  CustomerServiceOutlined, CalendarOutlined, RobotOutlined // 🔥 [NEW] 아이콘 추가
 } from '@ant-design/icons';
 import { doc, onSnapshot, updateDoc, Timestamp } from "firebase/firestore";
 import { db } from '../firebase'; 
@@ -10,13 +11,17 @@ import { useNavigate } from 'react-router-dom';
 import styled from 'styled-components';
 import axios from 'axios'; 
 
-// 🔥 컴포넌트 임포트
+// 🔥 기존 컴포넌트 임포트
 import LivePicks from './LivePicks'; 
 import RouletteGame from './RouletteGame';
 import MyPage from './MyPage';
 import Settings from './Settings'; 
 import Admin from './Admin';
-import Notice from './Notice'; // 🔥 [NEW] 공지사항 추가
+import Notice from './Notice';
+
+// 🔥🔥 [NEW] 새로 만든 페이지 임포트 (파일이 생성되어 있어야 합니다)
+import AttendancePage from './AttendancePage';
+import AutoSolutionPage from './AutoSolutionPage';
 
 const { Header, Content, Sider } = Layout;
 
@@ -141,7 +146,7 @@ const Main = () => {
             selectedKeys={[selectedKey]}
             onClick={(e) => {
                 if (e.key === 'telegram_cs') {
-                    window.open(TELEGRAM_CS_URL, '_blank'); // 🔥 관리자 문의 새창 열기
+                    window.open(TELEGRAM_CS_URL, '_blank'); 
                 } else {
                     setSelectedKey(e.key);
                 }
@@ -149,7 +154,15 @@ const Main = () => {
         >
           {/* 주요 메뉴 */}
           <Menu.Item key="1" icon={<DesktopOutlined />}>실시간 픽 (Live)</Menu.Item>
-          <Menu.Item key="notice" icon={<SoundOutlined style={{color:'#f59e0b'}} />}>공지사항</Menu.Item> {/* 🔥 공지사항 추가 */}
+          
+          {/* 🔥 [NEW] Auto 솔루션 메뉴 추가 */}
+          <Menu.Item key="auto" icon={<RobotOutlined style={{color: '#22d3ee'}} />}>Auto 솔루션 (Bot)</Menu.Item>
+          
+          <Menu.Item key="notice" icon={<SoundOutlined style={{color:'#f59e0b'}} />}>공지사항</Menu.Item>
+          
+          {/* 🔥 [NEW] 출석체크 메뉴 추가 */}
+          <Menu.Item key="attendance" icon={<CalendarOutlined style={{color: '#10b981'}} />}>출석체크 (Event)</Menu.Item>
+
           <Menu.Item key="2" icon={<GiftOutlined />}>룰렛 게임 (Event)</Menu.Item>
           <Menu.Item key="3" icon={<SettingOutlined />}>전략 설정</Menu.Item>
           <Menu.Item key="4" icon={<UserOutlined />}>마이페이지</Menu.Item>
@@ -203,8 +216,14 @@ const Main = () => {
               )
           )}
 
-          {/* 2. 공지사항 (🔥 추가됨) */}
+          {/* 🔥🔥 [NEW] Auto 솔루션 페이지 연결 */}
+          {selectedKey === 'auto' && <AutoSolutionPage />}
+
+          {/* 2. 공지사항 */}
           {selectedKey === 'notice' && <Notice user={userData} />}
+
+          {/* 🔥🔥 [NEW] 출석체크 페이지 연결 */}
+          {selectedKey === 'attendance' && <AttendancePage />}
 
           {/* 3. 룰렛 게임 */}
           {selectedKey === '2' && <RouletteGame user={userData} />}
