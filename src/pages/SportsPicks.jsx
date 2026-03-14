@@ -6,47 +6,75 @@ import { collection, query, orderBy, limit, onSnapshot } from "firebase/firestor
 import { db } from '../firebase';
 import dayjs from 'dayjs';
 
-const PageContainer = styled.div` padding: 20px; color: white; overflow-y: auto; height: 100%; `;
-const FeedContainer = styled.div` max-width: 800px; margin: 0 auto; `;
+const PageContainer = styled.div` 
+  padding: 20px; 
+  color: white; 
+  overflow-y: auto; 
+  height: 100%; 
+`;
+
+const FeedContainer = styled.div` 
+  max-width: 800px; 
+  margin: 0 auto; 
+`;
 
 const TelegramCard = styled(Card)`
-  background: #1f2937; border: 1px solid #374151; margin-bottom: 20px; border-radius: 12px;
+  background: #1f2937; 
+  border: 1px solid #374151; 
+  margin-bottom: 20px; 
+  border-radius: 12px;
   .ant-card-body { padding: 20px; }
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
   transition: transform 0.2s;
   &:hover { transform: translateY(-2px); border-color: #d4af37; }
 `;
 
-// 🔥 [NEW] 이미지 컨테이너 (로고 오버레이를 위해 relative 설정)
+// 🔥 [수정] 이미지 컨테이너: 하단에 검은색 그라데이션을 깔아서 
+// 로고 위치가 조금 다르더라도 자연스럽게 가려지도록 처리
 const ImageContainer = styled.div`
   position: relative;
   margin-bottom: 15px;
   border-radius: 8px;
   overflow: hidden;
+  
+  /* 하단 검은색 그라데이션 마스크 (워터마크 가리기용 보조 장치) */
+  &::after {
+    content: "";
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 60px; /* 하단 60px 정도를 어둡게 처리 */
+    background: linear-gradient(to top, #000000 10%, transparent 100%);
+    pointer-events: none;
+    z-index: 1;
+  }
 `;
 
-// 🔥 [NEW] 이미지 위 가짜 로고 (SCORES24 가리기용)
+// 🔥 [수정] 로고 오버레이: 더 크고, 진하고, 비치지 않게 수정
 const LogoOverlay = styled.div`
   position: absolute;
-  bottom: 10px;
-  left: 10px;
-  background: rgba(0, 0, 0, 0.85); /* 진한 검정 배경 */
+  bottom: 15px; /* 하단에서 조금 더 띄움 */
+  left: 15px;   /* 좌측에서 조금 더 띄움 */
+  background: #000000; /* 완전 검정 (비침 없음) */
   color: #d4af37; /* 금색 글씨 */
-  padding: 6px 12px;
+  padding: 10px 20px; /* 내부 여백 확대 (박스 크기 키움) */
   font-weight: 900;
-  font-size: 16px;
-  border-radius: 6px;
-  border: 1px solid #d4af37;
-  z-index: 10;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.5);
+  font-size: 18px; /* 글씨 크기 확대 */
+  border-radius: 8px;
+  border: 2px solid #d4af37; /* 테두리 두께 강화 */
+  z-index: 10; /* 그라데이션보다 위에 오도록 */
+  box-shadow: 0 4px 15px rgba(0,0,0, 0.9); /* 그림자 진하게 */
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 8px;
+  letter-spacing: 1px; /* 자간 추가로 가독성 확보 */
   
   /* 아이콘 추가 */
   &::before {
     content: "♛"; 
-    font-size: 14px;
+    font-size: 22px; /* 아이콘 크기 확대 */
+    margin-bottom: 2px;
   }
 `;
 
@@ -97,13 +125,19 @@ const SportsPicks = () => {
                           </span>
                       </div>
 
-                      {/* 🔥 [수정] 이미지 렌더링 부분 (로고 오버레이 적용) */}
                       {item.image && (
                           <ImageContainer>
+                              {/* 🔥 [수정] preview={false} 추가하여 클릭 방지 */}
                               <Image 
                                 src={item.image} 
                                 alt="analysis" 
-                                style={{width: '100%', objectFit:'cover', display:'block'}} 
+                                preview={false} 
+                                style={{
+                                    width: '100%', 
+                                    objectFit:'cover', 
+                                    display:'block',
+                                    pointerEvents: 'none' /* 마우스 이벤트 차단 (드래그/우클릭 방지 효과) */
+                                }} 
                               />
                               {/* 가짜 로고로 원본 로고 가리기 */}
                               <LogoOverlay>WB SPORTS AI</LogoOverlay>
