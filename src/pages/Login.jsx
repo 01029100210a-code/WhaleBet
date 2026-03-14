@@ -79,6 +79,17 @@ const ReservationWidget = styled.div` width: 100%; height: 100%; min-height: 400
 
 const Footer = styled.div` padding: 40px; background: #05070a; border-top: 1px solid #1e293b; text-align: center; color: #475569; font-size: 12px; `;
 
+// 🔥 이미지 스타일 컴포넌트 추가
+const GuideImage = styled.img`
+  width: 100%;
+  border-radius: 8px;
+  border: 1px solid #334155;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+  margin-bottom: 15px;
+  transition: transform 0.3s;
+  &:hover { transform: scale(1.02); }
+`;
+
 const reservationData = Array.from({ length: 30 }, (_, i) => ({ id: `user${Math.floor(Math.random() * 900) + 100}***`, time: `${Math.floor(Math.random() * 59) + 1}m ago`, action: 'Reserved AI Access' }));
 
 const Login = () => {
@@ -481,7 +492,7 @@ const Login = () => {
             </div>
         </Modal>
 
-        {/* 4. 이용 가이드 모달 (실제 기능 설명으로 업데이트됨) */}
+        {/* 4. 이용 가이드 모달 */}
         <Modal 
             title={<span style={{color:'white', fontSize: 18, fontWeight:'bold'}}><ReadOutlined /> WhaleBet User Guide</span>} 
             open={isGuideModalVisible} 
@@ -501,16 +512,36 @@ const Login = () => {
                     style={{background:'rgba(59, 130, 246, 0.1)', border:'1px solid #1e40af', marginBottom: 25}}
                 />
                 
-                {/* --- Step 1: 전략 설정 --- */}
+                {/* --- Step 1: 대시보드 소개 --- */}
+                <div style={{marginBottom: 35}}>
+                    <h3 style={{color:'white', fontSize: 16, borderLeft: '4px solid #f59e0b', paddingLeft: 10, marginBottom: 15}}>
+                        1. 실시간 대시보드 (Real-time Dashboard)
+                    </h3>
+                    <p style={{color:'#94a3b8', fontSize: 13, marginBottom: 15, lineHeight: 1.6}}>
+                        로그인 후 가장 먼저 보이는 메인 화면입니다. <b>현재 승률, 진행 중인 분석, 최근 결과</b> 등을 한눈에 파악할 수 있습니다.
+                    </p>
+                    
+                    {/* 🔥🔥 여기에 이미지가 들어갑니다! 🔥🔥 */}
+                    {/* public 폴더에 dashboard_guide.png 이미지를 넣어주세요. */}
+                    <GuideImage src="/dashboard_guide.png" alt="Dashboard Preview" />
+
+                    <div style={{background:'#111827', padding:15, borderRadius:8, fontSize:12, color:'#94a3b8'}}>
+                        <ul style={{margin:0, paddingLeft:20}}>
+                            <li style={{marginBottom:5}}><b>WAITING ZONE:</b> 현재 AI가 패턴을 분석 중인 테이블입니다. 분석이 완료되면 픽이 발생합니다.</li>
+                            <li><b>Recent Results:</b> AI가 예측한 최근 결과 내역입니다. Pick(예측)과 Result(결과)를 확인하세요.</li>
+                        </ul>
+                    </div>
+                </div>
+
+                {/* --- Step 2: 전략 설정 --- */}
                 <div style={{marginBottom: 35}}>
                     <h3 style={{color:'white', fontSize: 16, borderLeft: '4px solid #10b981', paddingLeft: 10, marginBottom: 15}}>
-                        1. 진입 단계 설정 (Entry Strategy)
+                        2. 진입 단계 설정 (Entry Strategy)
                     </h3>
                     <p style={{color:'#94a3b8', fontSize: 13, marginBottom: 15, lineHeight: 1.6}}>
                         [전략 설정] 메뉴에서 원하는 진입 단계를 선택하세요. 단계가 높을수록 <b>리스크는 낮아지지만 배팅 기회는 줄어듭니다.</b>
                     </p>
                     
-                    {/* [가상 UI] 전략 버튼 예시 */}
                     <div style={{background:'#111827', padding: '15px', borderRadius: 8, border:'1px dashed #374151', display:'flex', gap: 10, flexWrap:'wrap'}}>
                         <div style={{flex:1, minWidth:150, background:'rgba(16, 185, 129, 0.1)', border:'1px solid #10b981', borderRadius:6, padding:10}}>
                             <div style={{color:'#10b981', fontWeight:'bold', fontSize:13}}>1단계 진입 (공격형)</div>
@@ -523,10 +554,10 @@ const Login = () => {
                     </div>
                 </div>
 
-                {/* --- Step 2: 텔레그램 연동 --- */}
+                {/* --- Step 3: 텔레그램 연동 --- */}
                 <div style={{marginBottom: 35}}>
                     <h3 style={{color:'white', fontSize: 16, borderLeft: '4px solid #3b82f6', paddingLeft: 10, marginBottom: 15}}>
-                        2. 텔레그램 알림 연동 (Telegram Connect)
+                        3. 텔레그램 알림 연동 (Telegram Connect)
                     </h3>
                     <p style={{color:'#94a3b8', fontSize: 13, marginBottom: 20, lineHeight: 1.6}}>
                         설정한 단계의 픽이 나오면 텔레그램으로 즉시 메시지를 보내드립니다.<br/>
