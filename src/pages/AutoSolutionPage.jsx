@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Row, Col, Card, Statistic, Tag, Radio, List, Avatar, Spin, Badge } from 'antd';
+import { Row, Col, Card, Statistic, Tag, Radio, List, Avatar, Spin, Badge, Button } from 'antd'; // 🔥 Button 추가됨
 import { RiseOutlined, FallOutlined, RobotOutlined, SyncOutlined, DollarOutlined, HistoryOutlined, CheckCircleOutlined, CloseCircleOutlined } from '@ant-design/icons';
 import styled, { keyframes } from 'styled-components';
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, AreaChart, Area } from 'recharts';
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { collection, query, where, orderBy, onSnapshot, Timestamp } from "firebase/firestore";
 import { db } from '../firebase';
 import dayjs from 'dayjs';
@@ -83,7 +83,6 @@ const AutoSolutionPage = () => {
     let balance = startBalance;
     let wins = 0;
     let totalBets = 0;
-    const chartHistory = [];
     const logs = [];
 
     // 시간별 차트 데이터 초기화 (0시~현재)
