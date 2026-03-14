@@ -5,7 +5,7 @@ import styled, { keyframes } from 'styled-components';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { collection, query, where, orderBy, onSnapshot, Timestamp } from "firebase/firestore";
 import { db } from '../firebase';
-import { useNavigate } from 'react-router-dom'; // 페이지 이동용 훅
+import { useNavigate } from 'react-router-dom'; 
 import dayjs from 'dayjs';
 
 // --- 스타일 정의 ---
@@ -48,8 +48,11 @@ const BOT_STRATEGIES = [
     { id: 5, name: 'Bot 5 (4~6단 고위험)', desc: '4단계 진입 ~ 6단 마감', min: 4, max: 6, type: 'SYSTEM' },
 ];
 
+// 🔥 [중요] 시작 날짜 설정 (이 날짜 이전 데이터는 무시/선택 불가)
+const START_DATE = dayjs('2024-03-14'); 
+
 const AutoSolutionPage = () => {
-  const navigate = useNavigate(); // 페이지 이동용
+  const navigate = useNavigate(); 
   const [loading, setLoading] = useState(true);
   const [activeBotId, setActiveBotId] = useState(2); 
   const [rawData, setRawData] = useState([]); 
@@ -66,13 +69,15 @@ const AutoSolutionPage = () => {
 
   // 1. 데이터 가져오기
   useEffect(() => {
+    // 🔥 만약 선택된 날짜가 3/14 이전이면 강제로 데이터 비우고 종료
+    if (selectedDate.isBefore(START_DATE, 'day')) {
+        setRawData([]);
+        setLoading(false);
+        return;
+    }
+
     setLoading(true);
     
-    // 🔥 [수정] 3월 14일 이전 데이터는 강제로 안 나오게 처리 (요청사항)
-    const cutOffDate = dayjs('2024-03-14'); // 2026년이 아니라 현재 시점인 2024년 3월 14일로 설정해야 함 (만약 테스트용 미래 날짜라면 수정 필요)
-    // 실제 운영 시에는 '2024-03-14' 로 설정. (만약 오늘이 2026년이면 2026으로)
-    
-    // 선택 날짜 범위
     const startOfDay = selectedDate.startOf('day').toDate();
     const endOfDay = selectedDate.endOf('day').toDate();
     
@@ -88,16 +93,6 @@ const AutoSolutionPage = () => {
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
         let docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        
-        // 🔥 3월 14일 이전 데이터 필터링 (클라이언트 단에서 한번 더 거름)
-        // 만약 선택한 날짜가 3월 14일 이전이면 빈 배열 반환
-        // (단, 과거 히스토리 조회 기능을 위해 선택한 날짜가 오늘 이전이라도 데이터가 있으면 보여주는게 맞음)
-        // 요청하신 "3월 1~13일 데이터 안 나오게"는 특정 날짜 이전 데이터를 무시하라는 뜻으로 해석.
-        const ignoreBefore = dayjs('2024-03-14').startOf('day'); 
-        if (selectedDate.isBefore(ignoreBefore)) {
-            docs = [];
-        }
-
         setRawData(docs);
         setLoading(false);
     });
@@ -136,7 +131,7 @@ const AutoSolutionPage = () => {
         let isBetting = false;
         let betResult = ''; 
 
-        // Bot 1 (1단계 고정)
+        // Bot 1
         if (strategy.type === 'FIXED') {
             if (step === 1 && resultRaw === 'WIN') {
                 isBetting = true;
@@ -149,7 +144,7 @@ const AutoSolutionPage = () => {
                 betResult = 'LOSE';
             }
         } 
-        // Bot 2~5 (시스템)
+        // Bot 2~5
         else {
             const min = strategy.min;
             const max = strategy.max;
@@ -202,15 +197,17 @@ const AutoSolutionPage = () => {
     setTodayProfit(balance - startBalance);
     setTotalTrades(betCount);
     setWinRate(betCount === 0 ? 0 : Math.round((wins / betCount) * 100));
-    setLatestLogs(logs.reverse()); // 최신순 
+    setLatestLogs(logs.reverse()); 
   };
 
-  // 🔥 실전 배팅 버튼 클릭 시 이동 함수
   const handleGoToLive = () => {
-      // Main.jsx의 메뉴 상태를 변경해야 하므로 URL 이동보다는 로컬스토리지 저장 후 새로고침 or navigate
-      // 여기서는 심플하게 페이지 이동 처리 (Main.jsx에서 defaultSelectedKey 처리됨)
-      localStorage.setItem('lastMenuKey', '1'); // 메뉴 1번(실시간 픽)으로 설정
-      window.location.reload(); // 새로고침하여 메인으로 이동
+      localStorage.setItem('lastMenuKey', '1'); 
+      window.location.reload(); 
+  };
+
+  // 🔥 [NEW] 날짜 비활성화 함수 (3/14 이전 선택 불가)
+  const disabledDate = (current) => {
+    return current && current < START_DATE.startOf('day');
   };
 
   return (
@@ -231,6 +228,7 @@ const AutoSolutionPage = () => {
                 value={selectedDate} 
                 onChange={(date) => setSelectedDate(date || dayjs())} 
                 allowClear={false}
+                disabledDate={disabledDate} // 🔥 날짜 선택 제한 적용
                 style={{background:'#1f2937', border:'1px solid #374151', color:'white'}} 
              />
          </div>
@@ -396,7 +394,7 @@ const AutoSolutionPage = () => {
                         type="primary" 
                         block 
                         style={{background:'#d4af37', border:'none', color:'black', fontWeight:'bold', height: 40}}
-                        onClick={handleGoToLive} // 🔥 페이지 이동 함수 연결
+                        onClick={handleGoToLive} 
                       >
                           이 봇으로 실전 배팅하기
                       </Button>
