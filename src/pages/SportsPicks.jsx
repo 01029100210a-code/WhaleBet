@@ -36,13 +36,13 @@ const ImageContainer = styled.div`
   overflow: hidden; 
 `;
 
-// 🔥 [핵심 수정] 높이를 75px로 대폭 늘림 (기존 45px -> 75px)
+// 🔥 [유지] 높이를 75px로 두껍게 설정하여 로고 완벽 차단
 const LogoOverlay = styled.div`
   position: absolute;
   bottom: 0;
   left: 0;
   width: 100%;  
-  height: 75px; /* 🔥 높이를 키워서 위쪽 로고까지 확실히 덮음 */
+  height: 75px; 
   background: #000000; 
   
   display: flex;
@@ -51,13 +51,12 @@ const LogoOverlay = styled.div`
   
   color: #d4af37; 
   font-weight: 900;
-  font-size: 18px; /* 글씨도 조금 더 키움 */
+  font-size: 18px;
   letter-spacing: 2px;
   
-  border-top: 3px solid #d4af37; /* 상단 금색 선도 조금 더 두껍게 */
+  border-top: 3px solid #d4af37;
   z-index: 10;
   
-  /* 아이콘 */
   &::before {
     content: "♛"; 
     font-size: 22px;
@@ -85,6 +84,20 @@ const SportsPicks = () => {
 
     return () => unsubscribe();
   }, []);
+
+  // 🔥 [NEW] 깨진 문자() 제거 및 텍스트 정리 함수
+  const cleanContent = (text) => {
+    if (!text) return "";
+    
+    // 1. \uFFFD () 문자를 제거 (인코딩 깨짐)
+    // 2. 물음표(?)가 연달아 3개 이상(???) 나오는 경우도 제거 (번역 오류 흔적)
+    let cleaned = text.replace(/\ufffd/g, ""); 
+    
+    // 필요하다면 연속된 물음표 제거 (선택사항, 필요 없으면 주석 처리)
+    // cleaned = cleaned.replace(/\?{3,}/g, ""); 
+
+    return cleaned;
+  };
 
   return (
     <PageContainer>
@@ -115,7 +128,6 @@ const SportsPicks = () => {
 
                       {item.image && (
                           <ImageContainer>
-                              {/* 이미지 클릭 및 드래그 방지 */}
                               <Image 
                                 src={item.image} 
                                 alt="analysis" 
@@ -127,16 +139,15 @@ const SportsPicks = () => {
                                     pointerEvents: 'none'
                                 }} 
                               />
-                              
-                              {/* 🔥 두꺼워진 하단 배너 */}
                               <LogoOverlay>
                                 WB SPORTS AI PREMIUM
                               </LogoOverlay>
                           </ImageContainer>
                       )}
 
+                      {/* 🔥 [적용] cleanContent 함수로 텍스트 정리 후 출력 */}
                       <div style={{color:'#e5e7eb', whiteSpace: 'pre-line', lineHeight: '1.6', fontSize: 15}}>
-                          {item.content}
+                          {cleanContent(item.content)}
                       </div>
                   </TelegramCard>
               ))
