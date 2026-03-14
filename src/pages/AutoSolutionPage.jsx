@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Row, Col, Card, Statistic, Tag, Radio, List, Avatar, Spin, Badge, Button, DatePicker } from 'antd';
-import { RiseOutlined, FallOutlined, RobotOutlined, SyncOutlined, DollarOutlined, HistoryOutlined, CheckCircleOutlined, CloseCircleOutlined } from '@ant-design/icons';
+import { Row, Col, Card, Statistic, Tag, Radio, List, Avatar, Spin, DatePicker, Button } from 'antd';
+import { RiseOutlined, RobotOutlined, SyncOutlined, DollarOutlined, HistoryOutlined, CheckCircleOutlined, CloseCircleOutlined } from '@ant-design/icons';
 import styled, { keyframes } from 'styled-components';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { collection, query, where, orderBy, onSnapshot, Timestamp } from "firebase/firestore";
@@ -31,11 +31,12 @@ const BotSelector = styled(Radio.Group)`
 // 🔥 무한 롤링 슬라이드 애니메이션
 const scrollUp = keyframes`
   0% { transform: translateY(0); }
-  100% { transform: translateY(-50%); }
+  100% { transform: translateY(-50%); } 
 `;
 
 const RollingContainer = styled.div`
   height: 350px; overflow: hidden; position: relative;
+  /* 상하단 페이드 효과 */
   &::before, &::after {
     content: ""; position: absolute; left: 0; right: 0; height: 30px; z-index: 2; pointer-events: none;
   }
@@ -44,12 +45,14 @@ const RollingContainer = styled.div`
 `;
 
 const RollingContent = styled.div`
-  animation: ${scrollUp} 20s linear infinite;
+  /* 데이터 양에 따라 속도 조절 가능, 여기선 20초 */
+  animation: ${scrollUp} 30s linear infinite;
   &:hover { animation-play-state: paused; }
 `;
 
 const LogItem = styled(List.Item)`
   border-bottom: 1px solid #1f2937; padding: 12px 15px !important; background: #111827;
+  display: flex; justify-content: space-between; align-items: center;
   &:hover { background: rgba(255,255,255,0.02); }
 `;
 
@@ -68,48 +71,51 @@ const AutoSolutionPage = () => {
   const [rawData, setRawData] = useState([]); 
   const [selectedDate, setSelectedDate] = useState(dayjs()); // 날짜 선택 (기본 오늘)
 
+  // 계산된 상태값
   const [chartData, setChartData] = useState([]);
   const [currentBalance, setCurrentBalance] = useState(10000000);
-  const [allLogs, setAllLogs] = useState([]); // 전체 로그 (롤링용)
+  const [rollingLogs, setRollingLogs] = useState([]); // 롤링용 로그
   const [winRate, setWinRate] = useState(0);
   const [todayProfit, setTodayProfit] = useState(0);
   const [totalTrades, setTotalTrades] = useState(0);
 
   const startBalance = 10000000;
 
-  // 1. 데이터 가져오기 (날짜별 필터링 + 타임스탬프 기준)
+  // 1. 데이터 가져오기 (LivePicks 방식 적용: 타임스탬프 범위 쿼리)
   useEffect(() => {
     setLoading(true);
     
     // 선택한 날짜의 00:00:00 ~ 23:59:59 타임스탬프 구하기
+    // LivePicks.jsx의 로직을 그대로 사용하여 DB 쿼리에 적용
     const startOfDay = selectedDate.startOf('day').toDate();
     const endOfDay = selectedDate.endOf('day').toDate();
     
     const startTs = Timestamp.fromDate(startOfDay);
     const endTs = Timestamp.fromDate(endOfDay);
 
-    // 🔥 가장 확실한 방법: created_at 범위 쿼리
+    // 쿼리: created_at 기준으로 해당 날짜의 데이터만 가져옴
     const q = query(
         collection(db, "game_history"),
         where("created_at", ">=", startTs),
         where("created_at", "<=", endTs),
-        orderBy("created_at", "asc")
+        orderBy("created_at", "asc") // 그래프를 위해 시간순 정렬 필수
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
         const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        console.log(`🔥 ${selectedDate.format('YYYY-MM-DD')} 데이터 개수:`, docs.length);
+        console.log(`🔥 [${selectedDate.format('YYYY-MM-DD')}] 로드된 데이터: ${docs.length}건`);
         setRawData(docs);
         setLoading(false);
     });
 
     return () => unsubscribe();
-  }, [selectedDate]); // 날짜 바뀔때마다 재실행
+  }, [selectedDate]); 
 
-  // 2. 시뮬레이션 로직
+  // 2. 시뮬레이션 로직 (데이터가 로드되면 실행)
   useEffect(() => {
+    if (loading) return;
     calculateBotPerformance(activeBotId, rawData);
-  }, [activeBotId, rawData]);
+  }, [activeBotId, rawData, loading]);
 
   const calculateBotPerformance = (botId, data) => {
     const strategy = BOT_STRATEGIES.find(b => b.id === botId);
@@ -118,17 +124,21 @@ const AutoSolutionPage = () => {
     let betCount = 0;
     const logs = [];
 
-    const currentHour = selectedDate.isSame(dayjs(), 'day') ? new Date().getHours() : 23;
+    // 시간별 차트 데이터 초기화 (0시부터 현재시간/또는 23시까지)
+    const isToday = selectedDate.isSame(dayjs(), 'day');
+    const currentHour = isToday ? new Date().getHours() : 23;
+    
     const hourlyData = {};
     for (let i = 0; i <= currentHour; i++) hourlyData[i] = startBalance;
 
     data.forEach(game => {
+        // 데이터 파싱
         const step = parseInt(game.step, 10); 
-        const resultRaw = (game.result || "").trim().toUpperCase(); 
+        const resultRaw = (game.result || "").trim().toUpperCase(); // LivePicks 처럼 안전하게 처리
         
         let gameTime = new Date();
         if (game.created_at && game.created_at.toDate) {
-            gameTime = game.created_at.toDate();
+            gameTime = game.created_at.toDate(); // Firestore Timestamp -> JS Date
         }
         const hour = gameTime.getHours();
         const timeStr = dayjs(gameTime).format('HH:mm');
@@ -136,6 +146,8 @@ const AutoSolutionPage = () => {
         let change = 0;
         let isBetting = false;
 
+        // --- 봇 로직 적용 ---
+        
         // [Bot 1] 1단계 고정 배팅
         if (strategy.type === 'FIXED') {
             if (step === 1) {
@@ -149,12 +161,14 @@ const AutoSolutionPage = () => {
             const minStep = strategy.steps[0];
             const maxStep = strategy.steps[strategy.steps.length - 1];
 
+            // 적중 (수익 발생)
             if (step >= minStep && step <= maxStep && resultRaw === 'WIN') {
                 isBetting = true;
                 change = 150000; 
             }
-            // 패배 체크 강화 (LOSE, LOSS, LOSS_ALL)
-            else if (step === maxStep && (resultRaw.includes('LOS') || resultRaw.includes('LOSE'))) {
+            // 시스템 파산 (마지막 단계에서 패배)
+            // LivePicks 처럼 result가 WIN이 아니면 패배로 간주하되, 여기선 특정 단계 패배만 체크
+            else if (step === maxStep && resultRaw !== 'WIN') { 
                 isBetting = true;
                 change = -3300000; 
             }
@@ -175,9 +189,11 @@ const AutoSolutionPage = () => {
             });
         }
 
+        // 시간별 잔고 업데이트 (해당 시간의 마지막 잔고가 기록됨)
         if (hour <= currentHour) hourlyData[hour] = balance;
     });
 
+    // 차트 데이터 포맷팅
     const formattedChart = Object.keys(hourlyData).map(h => ({
         time: `${h}:00`,
         balance: hourlyData[h]
@@ -188,7 +204,7 @@ const AutoSolutionPage = () => {
     setTodayProfit(balance - startBalance);
     setTotalTrades(betCount);
     setWinRate(betCount === 0 ? 0 : Math.round((wins / betCount) * 100));
-    setAllLogs(logs.reverse()); // 최신순 정렬
+    setRollingLogs(logs.reverse()); // 최신순으로 정렬
   };
 
   return (
@@ -200,10 +216,10 @@ const AutoSolutionPage = () => {
                 <RobotOutlined /> WHALE AUTO SOLUTION
                 {loading && <Spin indicator={<SyncOutlined spin style={{fontSize: 20, color:'#d4af37'}} />} />}
             </h1>
-            <p style={{color:'#94a3b8', marginTop: 5}}>실시간 DB 데이터를 기반으로 각 전략별 수익을 시뮬레이션합니다.</p>
+            <p style={{color:'#94a3b8', marginTop: 5}}>실시간 DB 데이터를 기반으로 각 전략별 수익을 시뮬레이션합니다. (00시 자동 초기화)</p>
          </div>
          
-         {/* 🔥 날짜 선택기 추가 (과거 이력 조회용) */}
+         {/* 날짜 선택기 (과거 이력 조회) */}
          <div>
              <span style={{color:'#94a3b8', marginRight: 10}}>Date:</span>
              <DatePicker 
@@ -320,42 +336,45 @@ const AutoSolutionPage = () => {
               </Card>
           </Col>
 
-          {/* 4. 🔥 실시간 로그 (무한 롤링 슬라이드) */}
+          {/* 4. 실시간 로그 (무한 롤링) */}
           <Col xs={24} lg={8}>
               <Card 
-                title={<span style={{color:'white'}}><HistoryOutlined /> {selectedDate.isSame(dayjs(), 'day') ? "Real-time Activity" : "Past History"}</span>} 
+                title={<span style={{color:'white'}}><HistoryOutlined /> {selectedDate.isSame(dayjs(), 'day') ? "Real-time Activity" : "Past Activity"}</span>} 
                 bordered={false} 
                 style={{background:'#111827', border:'1px solid #374151', height:'100%', marginTop: window.innerWidth < 992 ? 20 : 0}}
                 bodyStyle={{padding: 0}}
               >
-                  {allLogs.length > 0 ? (
+                  {rollingLogs.length > 0 ? (
                       <RollingContainer>
-                          {/* 리스트를 두 번 반복해서 끊김 없는 무한 스크롤 구현 */}
-                          <RollingContent>
-                              {[...allLogs, ...allLogs].map((item, idx) => (
+                          {/* 
+                             무한 롤링을 위해 리스트를 복제해서 렌더링.
+                             데이터가 적을 경우엔 애니메이션 끄고 그냥 보여주는게 나음.
+                          */}
+                          <RollingContent style={{ animationPlayState: rollingLogs.length < 5 ? 'paused' : 'running' }}>
+                              {[...rollingLogs, ...rollingLogs].map((item, idx) => (
                                   <LogItem key={`${item.id}-${idx}`}>
-                                      <List.Item.Meta
-                                          avatar={
-                                              <Avatar 
-                                                  icon={item.result === 'WIN' ? <CheckCircleOutlined /> : <CloseCircleOutlined />} 
-                                                  style={{
-                                                      backgroundColor: item.result === 'WIN' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)', 
-                                                      color: item.result === 'WIN' ? '#10b981' : '#ef4444'
-                                                  }} 
-                                              />
-                                          }
-                                          title={<div style={{color:'white', fontSize: 13}}>{item.time} <span style={{color:'#64748b', fontSize: 11}}>| {item.room}</span></div>}
-                                          description={
-                                              <div style={{display:'flex', justifyContent:'space-between'}}>
-                                                  <span style={{color: item.result === 'WIN' ? '#10b981' : '#ef4444', fontWeight:'bold'}}>
-                                                      {item.change > 0 ? '+' : ''}{item.change.toLocaleString()}
-                                                  </span>
-                                                  <span style={{color:'#94a3b8', fontSize: 12}}>
-                                                      {(item.balance / 10000).toFixed(0)}만
-                                                  </span>
-                                              </div>
-                                          }
-                                      />
+                                      <div style={{display:'flex', alignItems:'center', gap: 10}}>
+                                          <Avatar 
+                                              size="small"
+                                              icon={item.result === 'WIN' ? <CheckCircleOutlined /> : <CloseCircleOutlined />} 
+                                              style={{
+                                                  backgroundColor: item.result === 'WIN' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)', 
+                                                  color: item.result === 'WIN' ? '#10b981' : '#ef4444'
+                                              }} 
+                                          />
+                                          <div>
+                                              <div style={{color:'white', fontSize: 13, fontWeight:'bold'}}>{item.room}</div>
+                                              <div style={{color:'#64748b', fontSize: 11}}>{item.time}</div>
+                                          </div>
+                                      </div>
+                                      <div style={{textAlign:'right'}}>
+                                          <div style={{color: item.result === 'WIN' ? '#10b981' : '#ef4444', fontWeight:'bold', fontSize: 13}}>
+                                              {item.change > 0 ? '+' : ''}{item.change.toLocaleString()}
+                                          </div>
+                                          <div style={{color:'#94a3b8', fontSize: 11}}>
+                                              {(item.balance / 10000).toFixed(0)}만
+                                          </div>
+                                      </div>
                                   </LogItem>
                               ))}
                           </RollingContent>
@@ -363,7 +382,7 @@ const AutoSolutionPage = () => {
                   ) : (
                       <div style={{textAlign:'center', padding: 60, color:'#64748b'}}>
                           <SyncOutlined spin={loading} style={{fontSize: 24, marginBottom: 10}} />
-                          <div>{loading ? '데이터 분석 중...' : '데이터가 없습니다.'}</div>
+                          <div>{loading ? '데이터 로딩 중...' : '데이터가 없습니다.'}</div>
                       </div>
                   )}
                   
