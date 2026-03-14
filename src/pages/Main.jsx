@@ -42,7 +42,7 @@ const Main = () => {
   const navigate = useNavigate();
   const [collapsed, setCollapsed] = useState(false);
   
-  // 🔥 [수정] 새로고침해도 마지막 메뉴 유지 (기본값 '1')
+  // 새로고침해도 마지막 메뉴 유지
   const [selectedKey, setSelectedKey] = useState(localStorage.getItem('lastMenuKey') || '1'); 
   
   const [userData, setUserData] = useState(null);
@@ -135,13 +135,13 @@ const Main = () => {
       return `${days}일 ${hours}시간 남음`;
   };
 
-  // 🔥 메뉴 클릭 핸들러 (클릭 시 저장)
+  // 메뉴 클릭 핸들러 (클릭 시 저장)
   const handleMenuClick = (e) => {
     if (e.key === 'telegram_cs') {
         window.open(TELEGRAM_CS_URL, '_blank'); 
     } else {
         setSelectedKey(e.key);
-        localStorage.setItem('lastMenuKey', e.key); // 🔥 메뉴 키 저장
+        localStorage.setItem('lastMenuKey', e.key); 
     }
   };
 
@@ -157,29 +157,23 @@ const Main = () => {
             defaultSelectedKeys={['1']} 
             mode="inline" 
             selectedKeys={[selectedKey]}
-            onClick={handleMenuClick} // 🔥 핸들러 연결
+            onClick={handleMenuClick} 
         >
-          {/* 주요 메뉴 */}
           <Menu.Item key="1" icon={<DesktopOutlined />}>실시간 픽 (Live)</Menu.Item>
           
-          {/* Auto 솔루션 메뉴 */}
-          <Menu.Item key="auto" icon={<RobotOutlined style={{color: '#22d3ee'}} />}>Auto 솔루션 (Bot)</Menu.Item>
+          {/* 🔥 [수정] 메뉴 이름 변경 (LiveBot) */}
+          <Menu.Item key="auto" icon={<RobotOutlined style={{color: '#22d3ee'}} />}>Auto 솔루션 (LiveBot)</Menu.Item>
           
           <Menu.Item key="notice" icon={<SoundOutlined style={{color:'#f59e0b'}} />}>공지사항</Menu.Item>
-          
-          {/* 출석체크 메뉴 */}
           <Menu.Item key="attendance" icon={<CalendarOutlined style={{color: '#10b981'}} />}>출석체크 (Event)</Menu.Item>
-
           <Menu.Item key="2" icon={<GiftOutlined />}>룰렛 게임 (Event)</Menu.Item>
           <Menu.Item key="3" icon={<SettingOutlined />}>전략 설정</Menu.Item>
           <Menu.Item key="4" icon={<UserOutlined />}>마이페이지</Menu.Item>
 
-          {/* 고객센터 */}
           <Menu.Item key="telegram_cs" icon={<CustomerServiceOutlined style={{color: '#3b82f6'}} />}>
              <span style={{color:'#3b82f6', fontWeight:'bold'}}>관리자 문의 (텔레그램)</span>
           </Menu.Item>
 
-          {/* 관리자 메뉴 */}
           {userData && adminRoles.includes(userData.role) && (
             <Menu.Item 
                 key="admin" 
@@ -211,7 +205,6 @@ const Main = () => {
         </Header>
         
         <Content>
-          {/* 1. 실시간 픽 */}
           {selectedKey === '1' && (
               isSubscriptionValid() ? <LivePicks /> : (
                   <div style={{textAlign:'center', marginTop:100, color:'white'}}>
@@ -223,25 +216,12 @@ const Main = () => {
               )
           )}
 
-          {/* Auto 솔루션 */}
           {selectedKey === 'auto' && <AutoSolutionPage />}
-
-          {/* 2. 공지사항 */}
           {selectedKey === 'notice' && <Notice user={userData} />}
-
-          {/* 출석체크 */}
           {selectedKey === 'attendance' && <AttendancePage />}
-
-          {/* 3. 룰렛 게임 */}
           {selectedKey === '2' && <RouletteGame user={userData} />}
-
-          {/* 4. 전략 설정 */}
           {selectedKey === '3' && <Settings />}
-
-          {/* 5. 마이페이지 */}
           {selectedKey === '4' && <MyPage user={userData} />}
-
-          {/* 6. 관리자 페이지 */}
           {selectedKey === 'admin' && <Admin />}
         </Content>
       </Layout>

@@ -5,6 +5,7 @@ import styled, { keyframes } from 'styled-components';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { collection, query, where, orderBy, onSnapshot, Timestamp } from "firebase/firestore";
 import { db } from '../firebase';
+import { useNavigate } from 'react-router-dom'; // 페이지 이동용 훅
 import dayjs from 'dayjs';
 
 // --- 스타일 정의 ---
@@ -27,7 +28,6 @@ const BotSelector = styled(Radio.Group)`
   .bot-desc { font-size: 11px; opacity: 0.8; font-weight: normal; }
 `;
 
-// NEW 뱃지 애니메이션
 const blink = keyframes` 0% { opacity: 1; } 50% { opacity: 0.4; } 100% { opacity: 1; } `;
 const NewBadge = styled(Tag)`
   animation: ${blink} 1.5s infinite; font-weight: bold; border: none; margin-right: 8px;
@@ -49,6 +49,7 @@ const BOT_STRATEGIES = [
 ];
 
 const AutoSolutionPage = () => {
+  const navigate = useNavigate(); // 페이지 이동용
   const [loading, setLoading] = useState(true);
   const [activeBotId, setActiveBotId] = useState(2); 
   const [rawData, setRawData] = useState([]); 
@@ -63,8 +64,15 @@ const AutoSolutionPage = () => {
 
   const startBalance = 10000000;
 
+  // 1. 데이터 가져오기
   useEffect(() => {
     setLoading(true);
+    
+    // 🔥 [수정] 3월 14일 이전 데이터는 강제로 안 나오게 처리 (요청사항)
+    const cutOffDate = dayjs('2024-03-14'); // 2026년이 아니라 현재 시점인 2024년 3월 14일로 설정해야 함 (만약 테스트용 미래 날짜라면 수정 필요)
+    // 실제 운영 시에는 '2024-03-14' 로 설정. (만약 오늘이 2026년이면 2026으로)
+    
+    // 선택 날짜 범위
     const startOfDay = selectedDate.startOf('day').toDate();
     const endOfDay = selectedDate.endOf('day').toDate();
     
@@ -79,7 +87,17 @@ const AutoSolutionPage = () => {
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-        const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        let docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        
+        // 🔥 3월 14일 이전 데이터 필터링 (클라이언트 단에서 한번 더 거름)
+        // 만약 선택한 날짜가 3월 14일 이전이면 빈 배열 반환
+        // (단, 과거 히스토리 조회 기능을 위해 선택한 날짜가 오늘 이전이라도 데이터가 있으면 보여주는게 맞음)
+        // 요청하신 "3월 1~13일 데이터 안 나오게"는 특정 날짜 이전 데이터를 무시하라는 뜻으로 해석.
+        const ignoreBefore = dayjs('2024-03-14').startOf('day'); 
+        if (selectedDate.isBefore(ignoreBefore)) {
+            docs = [];
+        }
+
         setRawData(docs);
         setLoading(false);
     });
@@ -87,12 +105,12 @@ const AutoSolutionPage = () => {
     return () => unsubscribe();
   }, [selectedDate]); 
 
+  // 2. 시뮬레이션 계산
   useEffect(() => {
     if (loading) return;
     calculateBotPerformance(activeBotId, rawData);
   }, [activeBotId, rawData, loading]);
 
-  // 🔥 [핵심 로직 수정] DB 결과를 기반으로 역산하여 수익/손실 계산
   const calculateBotPerformance = (botId, data) => {
     const strategy = BOT_STRATEGIES.find(b => b.id === botId);
     let balance = startBalance;
@@ -116,51 +134,37 @@ const AutoSolutionPage = () => {
 
         let change = 0;
         let isBetting = false;
-        let betResult = ''; // WIN or LOSE
+        let betResult = ''; 
 
-        // =================================================================
-        // 🔴 1번 봇: 1단계 고정 배팅 (50만원)
-        // =================================================================
+        // Bot 1 (1단계 고정)
         if (strategy.type === 'FIXED') {
-            // DB에 '1단계 WIN'으로 적혀있으면 -> 성공 (+50만)
             if (step === 1 && resultRaw === 'WIN') {
                 isBetting = true;
                 change = 500000;
                 betResult = 'WIN';
             }
-            // DB에 '2단계' 이상이거나 '1단계 LOSE'면 -> 1단계에서 틀렸다는 뜻 -> 실패 (-50만)
             else if (step > 1 || (step === 1 && resultRaw !== 'WIN')) {
                 isBetting = true;
                 change = -500000;
                 betResult = 'LOSE';
             }
         } 
-        // =================================================================
-        // 🔴 2~5번 봇: 시스템 배팅 (구간별 분할)
-        // =================================================================
+        // Bot 2~5 (시스템)
         else {
             const min = strategy.min;
             const max = strategy.max;
 
-            // 1. 적중 케이스: 내 설정 구간(min~max) 안에서 WIN이 떴을 때
             if (step >= min && step <= max && resultRaw === 'WIN') {
                 isBetting = true;
-                change = 150000; // 시스템 성공 시 평균 수익
+                change = 150000; 
                 betResult = 'WIN';
             }
-            // 2. 패배 케이스 (시스템 터짐):
-            //    - 내 설정 구간의 마지막 단계(max)에서 졌거나,
-            //    - 이미 max 단계를 넘어서 결과가 나왔다면 (시스템 이미 터짐)
             else if (step >= max && (step > max || resultRaw !== 'WIN')) {
-                // 단, 중복 집계를 방지하기 위해 정확히 max단계 패배 or max+1단계 이상일 때만 1회 처리
-                // (여기서는 단순화하여 해당 판이 시스템 파산에 해당하는지만 체크)
                 if (step === max && resultRaw !== 'WIN') {
                     isBetting = true;
-                    change = -3300000; // 시드머니 손실
+                    change = -3300000; 
                     betResult = 'LOSE';
                 }
-                // 만약 DB에 5단계 WIN이라고 적혀있는데, 나는 4단계 마감(Bot 2)이라면?
-                // -> 4단계에서 이미 틀리고 5단계로 간 것이므로 '패배' 처리해야 함.
                 else if (step > max) {
                      isBetting = true;
                      change = -3300000;
@@ -188,7 +192,6 @@ const AutoSolutionPage = () => {
         if (hour <= currentHour) hourlyData[hour] = balance;
     });
 
-    // 차트 포맷팅
     const formattedChart = Object.keys(hourlyData).map(h => ({
         time: `${h}:00`,
         balance: hourlyData[h]
@@ -200,6 +203,14 @@ const AutoSolutionPage = () => {
     setTotalTrades(betCount);
     setWinRate(betCount === 0 ? 0 : Math.round((wins / betCount) * 100));
     setLatestLogs(logs.reverse()); // 최신순 
+  };
+
+  // 🔥 실전 배팅 버튼 클릭 시 이동 함수
+  const handleGoToLive = () => {
+      // Main.jsx의 메뉴 상태를 변경해야 하므로 URL 이동보다는 로컬스토리지 저장 후 새로고침 or navigate
+      // 여기서는 심플하게 페이지 이동 처리 (Main.jsx에서 defaultSelectedKey 처리됨)
+      localStorage.setItem('lastMenuKey', '1'); // 메뉴 1번(실시간 픽)으로 설정
+      window.location.reload(); // 새로고침하여 메인으로 이동
   };
 
   return (
@@ -381,7 +392,12 @@ const AutoSolutionPage = () => {
                   </div>
                   
                   <div style={{padding: 15, borderTop: '1px solid #1f2937'}}>
-                      <Button type="primary" block style={{background:'#d4af37', border:'none', color:'black', fontWeight:'bold', height: 40}}>
+                      <Button 
+                        type="primary" 
+                        block 
+                        style={{background:'#d4af37', border:'none', color:'black', fontWeight:'bold', height: 40}}
+                        onClick={handleGoToLive} // 🔥 페이지 이동 함수 연결
+                      >
                           이 봇으로 실전 배팅하기
                       </Button>
                   </div>
