@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Form, Input, Button, message, Row, Col, Statistic, Card, Typography, Table, Tag, Modal, Divider, Alert } from 'antd';
+import { Form, Input, Button, message, Row, Col, Statistic, Card, Typography, Table, Tag, Modal, Divider, Alert, Tabs, Steps } from 'antd';
 import { 
   UserOutlined, LockOutlined, TrophyOutlined, FireOutlined, AimOutlined, 
   ThunderboltOutlined, SendOutlined, GlobalOutlined, HistoryOutlined,
   IdcardOutlined, PhoneOutlined, BarcodeOutlined, ReadOutlined, SafetyCertificateOutlined, MailOutlined, KeyOutlined,
-  CheckCircleOutlined, InfoCircleOutlined, RobotOutlined, SettingOutlined
+  CheckCircleOutlined, InfoCircleOutlined, RobotOutlined, SettingOutlined, DashboardOutlined, BellOutlined, StopOutlined
 } from '@ant-design/icons';
 import styled, { keyframes, createGlobalStyle } from 'styled-components';
 import { collection, query, orderBy, limit, onSnapshot, doc, getDoc, updateDoc, setDoc, Timestamp } from "firebase/firestore";
@@ -13,6 +13,9 @@ import { useNavigate } from 'react-router-dom';
 import bcrypt from 'bcryptjs';
 
 const { Title, Text } = Typography;
+const { TabPane } = Tabs;
+const { Step } = Steps;
+
 const ADMIN_TELEGRAM_URL = "https://t.me/whalebet_admin"; 
 
 // --- 애니메이션 ---
@@ -59,9 +62,18 @@ const GlobalStyle = createGlobalStyle`
   .ant-modal-close {
     color: white !important;
   }
-  /* Alert 컴포넌트 텍스트 강제 화이트 처리 */
-  .ant-alert-message { color: #1e293b !important; font-weight: bold; }
-  .ant-alert-description { color: #334155 !important; }
+  /* Tabs 커스텀 */
+  .ant-tabs-tab { color: #94a3b8 !important; }
+  .ant-tabs-tab.ant-tabs-tab-active .ant-tabs-tab-btn { color: #d4af37 !important; text-shadow: 0 0 10px rgba(212,175,55,0.3); }
+  .ant-tabs-ink-bar { background: #d4af37 !important; }
+  
+  /* Steps 커스텀 */
+  .ant-steps-item-title { color: white !important; font-weight: bold !important; font-size: 14px !important; }
+  .ant-steps-item-description { color: #94a3b8 !important; font-size: 12px !important; }
+  .ant-steps-item-process .ant-steps-item-icon { background: #d4af37 !important; border-color: #d4af37 !important; }
+  .ant-steps-item-wait .ant-steps-item-icon { border-color: #475569 !important; }
+  .ant-steps-item-finish .ant-steps-item-icon { border-color: #10b981 !important; }
+  .ant-steps-item-finish .ant-steps-item-icon > .ant-steps-icon { color: #10b981 !important; }
 `;
 
 const Container = styled.div` min-height: 100vh; display: flex; flex-direction: column; background: radial-gradient(circle at 50% 10%, #1e293b 0%, #0b0e14 100%); overflow-x: hidden; position: relative; `;
@@ -79,15 +91,37 @@ const ReservationWidget = styled.div` width: 100%; height: 100%; min-height: 400
 
 const Footer = styled.div` padding: 40px; background: #05070a; border-top: 1px solid #1e293b; text-align: center; color: #475569; font-size: 12px; `;
 
-// 🔥 이미지 스타일 컴포넌트 추가
-const GuideImage = styled.img`
+// 이미지 플레이스홀더 스타일 (이미지 로딩 실패 시 대비)
+const GuideImageContainer = styled.div`
   width: 100%;
-  border-radius: 8px;
+  min-height: 180px;
+  background: #0f172a;
   border: 1px solid #334155;
-  box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+  border-radius: 8px;
   margin-bottom: 15px;
-  transition: transform 0.3s;
-  &:hover { transform: scale(1.02); }
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  position: relative;
+  
+  img {
+    width: 100%;
+    height: auto;
+    display: block;
+    transition: transform 0.3s;
+  }
+  
+  &:hover img { transform: scale(1.02); }
+  
+  &::after {
+    content: '이미지를 불러올 수 없습니다.';
+    color: #475569;
+    font-size: 12px;
+    position: absolute;
+    z-index: 0;
+  }
+  img { z-index: 1; position: relative; }
 `;
 
 const reservationData = Array.from({ length: 30 }, (_, i) => ({ id: `user${Math.floor(Math.random() * 900) + 100}***`, time: `${Math.floor(Math.random() * 59) + 1}m ago`, action: 'Reserved AI Access' }));
@@ -140,11 +174,21 @@ const Login = () => {
       if (!userSnap.exists()) { message.error("존재하지 않는 아이디입니다."); setLoading(false); return; }
       const userData = userSnap.data();
 
-      // 만료 체크
+      // --- [자동 만료 체크 로직] ---
+      // 데모 계정이거나, 만료일이 있는 계정인 경우
       if (userData.expiryDate) {
         const expiry = userData.expiryDate.toDate();
-        if (new Date() > expiry) {
-          message.error("만료된 데모 계정입니다.");
+        const now = new Date();
+        
+        if (now > expiry) {
+          // 시간이 지났다면 DB 업데이트 (알림 차단 및 계정 차단)
+          await updateDoc(userRef, {
+            isBlocked: true,
+            isTelegramActive: false, // 텔레그램 알림 자동 해제
+            blockedReason: 'Demo Expired'
+          });
+          
+          message.error("만료된 데모 계정입니다. (텔레그램 알림도 자동 중단되었습니다)");
           setLoading(false);
           return;
         }
@@ -168,7 +212,10 @@ const Login = () => {
       
       message.success(`환영합니다, ${values.username}님!`);
       navigate('/main');
-    } catch (error) { message.error("로그인 오류"); }
+    } catch (error) { 
+        console.error(error);
+        message.error("로그인 오류"); 
+    }
     setLoading(false);
   };
 
@@ -189,7 +236,6 @@ const Login = () => {
   };
 
   // --- [이메일 인증 및 데모 생성 로직] ---
-
   const handleSendCode = () => {
     if (!emailForDemo || !emailForDemo.includes('@')) {
         message.error("올바른 이메일 주소를 입력해주세요.");
@@ -215,7 +261,7 @@ const Login = () => {
         const randomId = `demo${Math.floor(1000 + Math.random() * 9000)}`;
         const randomPw = Math.random().toString(36).slice(-6); 
         const expiryDate = new Date();
-        expiryDate.setHours(expiryDate.getHours() + 3);
+        expiryDate.setHours(expiryDate.getHours() + 3); // 3시간 설정
 
         const salt = bcrypt.genSaltSync(10);
         const hashedPassword = bcrypt.hashSync(randomPw, salt);
@@ -230,7 +276,8 @@ const Login = () => {
             expiryDate: Timestamp.fromDate(expiryDate),
             isBlocked: false,
             isApproved: true,
-            strategyLevel: 1
+            strategyLevel: 1,
+            isTelegramActive: false // 초기엔 비활성화
         });
 
         setGeneratedAccount({ id: randomId, pw: randomPw, expiry: expiryDate.toLocaleTimeString(), email: emailForDemo });
@@ -492,115 +539,150 @@ const Login = () => {
             </div>
         </Modal>
 
-        {/* 4. 이용 가이드 모달 */}
+        {/* 4. 수정된 이용 가이드 모달 */}
         <Modal 
-            title={<span style={{color:'white', fontSize: 18, fontWeight:'bold'}}><ReadOutlined /> WhaleBet User Guide</span>} 
+            title={<span style={{color:'white', fontSize: 18, fontWeight:'bold'}}><ReadOutlined /> WhaleBet System Guide</span>} 
             open={isGuideModalVisible} 
             onCancel={() => setIsGuideModalVisible(false)} 
             footer={null} 
-            width={750}
+            width={800}
             centered
         >
-            <div style={{maxHeight:'65vh', overflowY:'auto', paddingRight: 8}}>
-                
-                <Alert 
-                    message="WhaleBet 2.0 AI System" 
-                    description="실시간 바카라 패턴 분석 및 텔레그램 자동 알림 시스템입니다. 전략 설정과 알림 연동 방법을 확인하세요." 
-                    type="info" 
-                    showIcon 
-                    icon={<InfoCircleOutlined style={{color:'#3b82f6'}} />}
-                    style={{background:'rgba(59, 130, 246, 0.1)', border:'1px solid #1e40af', marginBottom: 25}}
-                />
-                
-                {/* --- Step 1: 대시보드 소개 --- */}
-                <div style={{marginBottom: 35}}>
-                    <h3 style={{color:'white', fontSize: 16, borderLeft: '4px solid #f59e0b', paddingLeft: 10, marginBottom: 15}}>
-                        1. 실시간 대시보드 (Real-time Dashboard)
-                    </h3>
-                    <p style={{color:'#94a3b8', fontSize: 13, marginBottom: 15, lineHeight: 1.6}}>
-                        로그인 후 가장 먼저 보이는 메인 화면입니다. <b>현재 승률, 진행 중인 분석, 최근 결과</b> 등을 한눈에 파악할 수 있습니다.
-                    </p>
-                    
-                    {/* 🔥🔥 여기에 이미지가 들어갑니다! 🔥🔥 */}
-                    {/* public 폴더에 dashboard_guide.png 이미지를 넣어주세요. */}
-                    <GuideImage src="/dashboard_guide.png" alt="Dashboard Preview" />
+            <Tabs defaultActiveKey="1" style={{color: 'white'}}>
+                {/* 탭 1: 대시보드 및 집계 현황 */}
+                <TabPane tab={<span><DashboardOutlined /> 대시보드</span>} key="1">
+                    <div style={{padding: '10px 0'}}>
+                        <h3 style={{color:'#d4af37', fontSize: 16, marginBottom: 15}}>1. 상단 집계 현황 (Stats Bar)</h3>
+                        <p style={{color:'#cbd5e1', fontSize: 13, marginBottom: 15}}>
+                            메인 화면 최상단에는 당일 AI 예측 성과가 실시간으로 집계됩니다.
+                        </p>
+                        
+                        <Row gutter={[10, 10]} style={{marginBottom: 20}}>
+                            <Col span={6}>
+                                <div style={{background: '#111827', padding: 10, borderRadius: 6, textAlign:'center', border:'1px solid #1f2937'}}>
+                                    <div style={{color:'#10b981', fontWeight:'bold'}}>WIN RATE</div>
+                                    <div style={{color:'#64748b', fontSize:11}}>금일 적중 확률</div>
+                                </div>
+                            </Col>
+                            <Col span={6}>
+                                <div style={{background: '#111827', padding: 10, borderRadius: 6, textAlign:'center', border:'1px solid #1f2937'}}>
+                                    <div style={{color:'#d4af37', fontWeight:'bold'}}>TOTAL SCORE</div>
+                                    <div style={{color:'#64748b', fontSize:11}}>누적 수익 포인트</div>
+                                </div>
+                            </Col>
+                            <Col span={6}>
+                                <div style={{background: '#111827', padding: 10, borderRadius: 6, textAlign:'center', border:'1px solid #1f2937'}}>
+                                    <div style={{color:'#f59e0b', fontWeight:'bold'}}>STREAK</div>
+                                    <div style={{color:'#64748b', fontSize:11}}>현재 연승 횟수</div>
+                                </div>
+                            </Col>
+                            <Col span={6}>
+                                <div style={{background: '#111827', padding: 10, borderRadius: 6, textAlign:'center', border:'1px solid #1f2937'}}>
+                                    <div style={{color:'#3b82f6', fontWeight:'bold'}}>SAFETY</div>
+                                    <div style={{color:'#64748b', fontSize:11}}>안전구간 적중</div>
+                                </div>
+                            </Col>
+                        </Row>
 
-                    <div style={{background:'#111827', padding:15, borderRadius:8, fontSize:12, color:'#94a3b8'}}>
-                        <ul style={{margin:0, paddingLeft:20}}>
-                            <li style={{marginBottom:5}}><b>WAITING ZONE:</b> 현재 AI가 패턴을 분석 중인 테이블입니다. 분석이 완료되면 픽이 발생합니다.</li>
-                            <li><b>Recent Results:</b> AI가 예측한 최근 결과 내역입니다. Pick(예측)과 Result(결과)를 확인하세요.</li>
-                        </ul>
-                    </div>
-                </div>
-
-                {/* --- Step 2: 전략 설정 --- */}
-                <div style={{marginBottom: 35}}>
-                    <h3 style={{color:'white', fontSize: 16, borderLeft: '4px solid #10b981', paddingLeft: 10, marginBottom: 15}}>
-                        2. 진입 단계 설정 (Entry Strategy)
-                    </h3>
-                    <p style={{color:'#94a3b8', fontSize: 13, marginBottom: 15, lineHeight: 1.6}}>
-                        [전략 설정] 메뉴에서 원하는 진입 단계를 선택하세요. 단계가 높을수록 <b>리스크는 낮아지지만 배팅 기회는 줄어듭니다.</b>
-                    </p>
-                    
-                    <div style={{background:'#111827', padding: '15px', borderRadius: 8, border:'1px dashed #374151', display:'flex', gap: 10, flexWrap:'wrap'}}>
-                        <div style={{flex:1, minWidth:150, background:'rgba(16, 185, 129, 0.1)', border:'1px solid #10b981', borderRadius:6, padding:10}}>
-                            <div style={{color:'#10b981', fontWeight:'bold', fontSize:13}}>1단계 진입 (공격형)</div>
-                            <div style={{color:'#6b7280', fontSize:11}}>모든 픽을 알림받습니다.</div>
-                        </div>
-                        <div style={{flex:1, minWidth:150, background:'#1f2937', border:'1px solid #374151', borderRadius:6, padding:10}}>
-                            <div style={{color:'white', fontWeight:'bold', fontSize:13}}>4단계 진입 (신중형)</div>
-                            <div style={{color:'#6b7280', fontSize:11}}>3연패 구간 이후 진입합니다.</div>
+                        <h3 style={{color:'#d4af37', fontSize: 16, marginBottom: 15}}>2. 메인 대시보드 화면</h3>
+                        <GuideImageContainer>
+                            <img src="/dashboard_guide.png" alt="Dashboard Preview" />
+                        </GuideImageContainer>
+                        <div style={{background:'rgba(255,255,255,0.05)', padding:15, borderRadius:8, fontSize:13, color:'#cbd5e1', lineHeight:1.6}}>
+                            <b style={{color:'white'}}>● Waiting Zone:</b> 현재 AI가 실시간으로 패턴을 분석 중인 테이블 목록입니다.<br/>
+                            <b style={{color:'white'}}>● Live Result:</b> 최근 분석 결과와 승패 여부를 보여줍니다.
                         </div>
                     </div>
-                </div>
+                </TabPane>
 
-                {/* --- Step 3: 텔레그램 연동 --- */}
-                <div style={{marginBottom: 35}}>
-                    <h3 style={{color:'white', fontSize: 16, borderLeft: '4px solid #3b82f6', paddingLeft: 10, marginBottom: 15}}>
-                        3. 텔레그램 알림 연동 (Telegram Connect)
-                    </h3>
-                    <p style={{color:'#94a3b8', fontSize: 13, marginBottom: 20, lineHeight: 1.6}}>
-                        설정한 단계의 픽이 나오면 텔레그램으로 즉시 메시지를 보내드립니다.<br/>
-                        연동을 위해 <b>Chat ID</b>를 설정 페이지에 입력해야 합니다.
-                    </p>
+                {/* 탭 2: AI 로직 및 알림 프로세스 */}
+                <TabPane tab={<span><RobotOutlined /> AI 로직 & 알림</span>} key="2">
+                    <div style={{padding: '10px 0'}}>
+                        <Alert 
+                            message="AI 패턴 분석 프로세스" 
+                            description="AI는 3단계에 걸쳐 정밀하게 배팅 시점을 포착하고 알림을 전송합니다." 
+                            type="info" 
+                            showIcon 
+                            style={{background:'#172554', border:'1px solid #1e3a8a', marginBottom: 25}}
+                        />
 
-                    <div style={{background:'#1e3a8a', padding: '20px', borderRadius: 8, color:'white', border:'1px solid #2563eb'}}>
-                        <div style={{display:'flex', gap: 15, alignItems:'flex-start', marginBottom: 15}}>
-                            <div style={{background:'#3b82f6', width:24, height:24, borderRadius:'50%', textAlign:'center', fontWeight:'bold', lineHeight:'24px'}}>1</div>
-                            <div>
-                                <div style={{fontWeight:'bold', fontSize:14}}>텔레그램에서 ID 확인하기</div>
-                                <div style={{fontSize:12, color:'#bfdbfe'}}>
-                                    텔레그램 검색창에 <Tag color="blue">@userinfobot</Tag>을 검색하고<br/>
-                                    [시작] 버튼을 누르면 숫자로 된 ID가 나옵니다.
+                        <Steps direction="vertical" current={-1}>
+                            <Step 
+                                title="1단계: 실시간 패턴 감지 (Pattern Detection)" 
+                                description="수천 개의 슈(Shoe) 데이터를 실시간으로 스캔하여 승률이 높은 특정 패턴을 찾아냅니다. (모든 단계 공통)" 
+                                icon={<DashboardOutlined />}
+                            />
+                            <Step 
+                                title="2단계: 배팅 시작 알림 (Betting Alert)" 
+                                description={
+                                    <div style={{marginTop: 5}}>
+                                        <div style={{color:'#cbd5e1', marginBottom: 5}}>사용자가 설정한 <span style={{color:'#d4af37', fontWeight:'bold'}}>전략 단계(Level)</span>에 따라 알림이 다르게 전송됩니다.</div>
+                                        <div style={{display:'flex', gap: 10, marginTop: 8}}>
+                                            <Tag color="green">Level 1: 모든 공격적 패턴 알림</Tag>
+                                            <Tag color="orange">Level 4: 3연패 후 안전 진입 알림</Tag>
+                                        </div>
+                                    </div>
+                                }
+                                icon={<BellOutlined />} 
+                            />
+                            <Step 
+                                title="3단계: 결과 처리 및 검증 (Result Verification)" 
+                                description="게임 결과가 나오면 즉시 승/패를 판독하여 대시보드에 반영하고, 텔레그램으로 결과를 리포트합니다." 
+                                icon={<CheckCircleOutlined />} 
+                            />
+                        </Steps>
+                    </div>
+                </TabPane>
+
+                {/* 탭 3: 텔레그램 연동 및 주의사항 */}
+                <TabPane tab={<span><SendOutlined /> 텔레그램 연동</span>} key="3">
+                    <div style={{padding: '10px 0'}}>
+                        <h3 style={{color:'#d4af37', fontSize: 16, marginBottom: 15}}>텔레그램 봇 연동 방법</h3>
+                        
+                        <div style={{background:'#1e3a8a', padding: '20px', borderRadius: 8, color:'white', border:'1px solid #2563eb', marginBottom: 25}}>
+                            <div style={{display:'flex', gap: 15, alignItems:'flex-start', marginBottom: 15}}>
+                                <div style={{background:'#3b82f6', minWidth:24, height:24, borderRadius:'50%', textAlign:'center', fontWeight:'bold', lineHeight:'24px'}}>1</div>
+                                <div>
+                                    <div style={{fontWeight:'bold', fontSize:14}}>Chat ID 확인</div>
+                                    <div style={{fontSize:12, color:'#bfdbfe'}}>텔레그램에서 <Tag color="blue">@userinfobot</Tag>을 검색 후 실행하여 ID 숫자 확인</div>
+                                </div>
+                            </div>
+                            <div style={{display:'flex', gap: 15, alignItems:'flex-start', marginBottom: 15}}>
+                                <div style={{background:'#3b82f6', minWidth:24, height:24, borderRadius:'50%', textAlign:'center', fontWeight:'bold', lineHeight:'24px'}}>2</div>
+                                <div>
+                                    <div style={{fontWeight:'bold', fontSize:14}}>설정 페이지 입력</div>
+                                    <div style={{fontSize:12, color:'#bfdbfe'}}>로그인 후 [전략 설정] 페이지 하단에 ID 입력 및 스위치 ON</div>
+                                </div>
+                            </div>
+                            <div style={{display:'flex', gap: 15, alignItems:'flex-start'}}>
+                                <div style={{background:'#3b82f6', minWidth:24, height:24, borderRadius:'50%', textAlign:'center', fontWeight:'bold', lineHeight:'24px'}}>3</div>
+                                <div>
+                                    <div style={{fontWeight:'bold', fontSize:14}}>알림 수신 시작</div>
+                                    <div style={{fontSize:12, color:'#bfdbfe'}}>이제 설정된 단계의 픽이 발생하면 즉시 메시지가 도착합니다.</div>
                                 </div>
                             </div>
                         </div>
-                        <div style={{display:'flex', gap: 15, alignItems:'flex-start', marginBottom: 15}}>
-                            <div style={{background:'#3b82f6', width:24, height:24, borderRadius:'50%', textAlign:'center', fontWeight:'bold', lineHeight:'24px'}}>2</div>
-                            <div>
-                                <div style={{fontWeight:'bold', fontSize:14}}>설정 페이지에 입력</div>
-                                <div style={{fontSize:12, color:'#bfdbfe'}}>
-                                    확인한 ID를 [전략 설정] 페이지 하단 <b>YOUR CHAT ID</b> 칸에 입력하세요.
-                                </div>
-                            </div>
-                        </div>
-                        <div style={{display:'flex', gap: 15, alignItems:'flex-start'}}>
-                            <div style={{background:'#3b82f6', width:24, height:24, borderRadius:'50%', textAlign:'center', fontWeight:'bold', lineHeight:'24px'}}>3</div>
-                            <div>
-                                <div style={{fontWeight:'bold', fontSize:14}}>저장 및 알림 수신</div>
-                                <div style={{fontSize:12, color:'#bfdbfe'}}>
-                                    [알림 활성화] 스위치를 켜고 저장하면 연동이 완료됩니다.
-                                </div>
-                            </div>
+
+                        <Divider style={{borderColor:'#334155'}} />
+
+                        <h3 style={{color:'#ef4444', fontSize: 16, marginBottom: 15, display:'flex', alignItems:'center', gap:8}}>
+                            <StopOutlined /> 데모 계정 주의사항
+                        </h3>
+                        <div style={{background:'rgba(239, 68, 68, 0.1)', border:'1px solid #ef4444', borderRadius:8, padding:15}}>
+                            <p style={{color:'#fca5a5', margin:0, fontSize:13, lineHeight:1.6}}>
+                                <b>3시간 무료 체험</b> 시간이 종료되면 자동으로 계정이 만료됩니다.<br/>
+                                만료 시 <u style={{fontWeight:'bold'}}>텔레그램 알림도 즉시 중단(차단)</u>되며, 더 이상 로그인할 수 없습니다.<br/>
+                                지속적인 이용을 원하시면 정식 회원가입을 진행해주세요.
+                            </p>
                         </div>
                     </div>
-                </div>
-
-                <div style={{textAlign:'center', marginTop: 30}}>
-                    <Button type="primary" size="large" onClick={() => setIsGuideModalVisible(false)} style={{width: 200, fontWeight:'bold', background:'#3b82f6'}}>
-                        확인 완료 (Close)
-                    </Button>
-                </div>
+                </TabPane>
+            </Tabs>
+            
+            <div style={{textAlign:'center', marginTop: 25}}>
+                <Button type="primary" onClick={() => setIsGuideModalVisible(false)} style={{width: 150, fontWeight:'bold'}}>
+                    닫기 (Close)
+                </Button>
             </div>
         </Modal>
 
