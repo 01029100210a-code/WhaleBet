@@ -29,51 +29,39 @@ const TelegramCard = styled(Card)`
   &:hover { transform: translateY(-2px); border-color: #d4af37; }
 `;
 
-// 🔥 [수정] 이미지 컨테이너: 하단에 검은색 그라데이션을 깔아서 
-// 로고 위치가 조금 다르더라도 자연스럽게 가려지도록 처리
 const ImageContainer = styled.div`
   position: relative;
   margin-bottom: 15px;
   border-radius: 8px;
-  overflow: hidden;
-  
-  /* 하단 검은색 그라데이션 마스크 (워터마크 가리기용 보조 장치) */
-  &::after {
-    content: "";
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    width: 100%;
-    height: 60px; /* 하단 60px 정도를 어둡게 처리 */
-    background: linear-gradient(to top, #000000 10%, transparent 100%);
-    pointer-events: none;
-    z-index: 1;
-  }
+  overflow: hidden; /* 자식 요소가 둥근 모서리를 넘지 않도록 */
 `;
 
-// 🔥 [수정] 로고 오버레이: 더 크고, 진하고, 비치지 않게 수정
+// 🔥 [핵심 수정] 하단 전체를 덮는 띠(Banner) 형태로 변경
 const LogoOverlay = styled.div`
   position: absolute;
-  bottom: 15px; /* 하단에서 조금 더 띄움 */
-  left: 15px;   /* 좌측에서 조금 더 띄움 */
+  bottom: 0;
+  left: 0;
+  width: 100%;  /* 가로 전체 꽉 차게 */
+  height: 45px; /* 로고를 가리기에 충분한 높이 */
   background: #000000; /* 완전 검정 (비침 없음) */
-  color: #d4af37; /* 금색 글씨 */
-  padding: 10px 20px; /* 내부 여백 확대 (박스 크기 키움) */
-  font-weight: 900;
-  font-size: 18px; /* 글씨 크기 확대 */
-  border-radius: 8px;
-  border: 2px solid #d4af37; /* 테두리 두께 강화 */
-  z-index: 10; /* 그라데이션보다 위에 오도록 */
-  box-shadow: 0 4px 15px rgba(0,0,0, 0.9); /* 그림자 진하게 */
+  
   display: flex;
+  justify-content: center; /* 텍스트 중앙 정렬 */
   align-items: center;
-  gap: 8px;
-  letter-spacing: 1px; /* 자간 추가로 가독성 확보 */
+  
+  color: #d4af37; /* 금색 텍스트 */
+  font-weight: 900;
+  font-size: 16px;
+  letter-spacing: 1.5px;
+  
+  border-top: 2px solid #d4af37; /* 상단에 금색 선을 넣어 디자인처럼 보이게 함 */
+  z-index: 10;
   
   /* 아이콘 추가 */
   &::before {
     content: "♛"; 
-    font-size: 22px; /* 아이콘 크기 확대 */
+    font-size: 18px;
+    margin-right: 8px;
     margin-bottom: 2px;
   }
 `;
@@ -127,7 +115,7 @@ const SportsPicks = () => {
 
                       {item.image && (
                           <ImageContainer>
-                              {/* 🔥 [수정] preview={false} 추가하여 클릭 방지 */}
+                              {/* 이미지 클릭 방지 (preview={false}) */}
                               <Image 
                                 src={item.image} 
                                 alt="analysis" 
@@ -136,11 +124,14 @@ const SportsPicks = () => {
                                     width: '100%', 
                                     objectFit:'cover', 
                                     display:'block',
-                                    pointerEvents: 'none' /* 마우스 이벤트 차단 (드래그/우클릭 방지 효과) */
+                                    pointerEvents: 'none' // 마우스 동작 차단
                                 }} 
                               />
-                              {/* 가짜 로고로 원본 로고 가리기 */}
-                              <LogoOverlay>WB SPORTS AI</LogoOverlay>
+                              
+                              {/* 🔥 하단 전체를 가리는 블랙 배너 */}
+                              <LogoOverlay>
+                                WB SPORTS AI PREMIUM
+                              </LogoOverlay>
                           </ImageContainer>
                       )}
 
