@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Row, Col, Card, Statistic, Tag, Radio, List, Avatar, Spin, DatePicker, Button } from 'antd';
-import { RiseOutlined, RobotOutlined, SyncOutlined, DollarOutlined, HistoryOutlined, CheckCircleOutlined, CloseCircleOutlined } from '@ant-design/icons';
+import { Row, Col, Card, Statistic, Tag, Radio, List, Avatar, Spin, DatePicker, Button, Badge } from 'antd';
+import { RiseOutlined, RobotOutlined, SyncOutlined, DollarOutlined, HistoryOutlined, CheckCircleOutlined, CloseCircleOutlined, FireFilled } from '@ant-design/icons';
 import styled, { keyframes } from 'styled-components';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { collection, query, where, orderBy, onSnapshot, Timestamp } from "firebase/firestore";
@@ -11,7 +11,6 @@ import dayjs from 'dayjs';
 const PageContainer = styled.div` padding: 20px; background: transparent; height: 100%; color: white; overflow-y: auto; `;
 const StatusCard = styled.div` background: #1f2937; border: 1px solid #374151; border-radius: 12px; padding: 20px; text-align: center; height: 100%; transition: 0.3s; &:hover { border-color: #d4af37; } display: flex; flex-direction: column; justify-content: center; `;
 
-// 봇 선택 버튼
 const BotSelector = styled(Radio.Group)`
   width: 100%; display: flex; gap: 10px; margin-bottom: 20px;
   .ant-radio-button-wrapper {
@@ -28,32 +27,16 @@ const BotSelector = styled(Radio.Group)`
   .bot-desc { font-size: 11px; opacity: 0.8; font-weight: normal; }
 `;
 
-// 🔥 무한 롤링 슬라이드 애니메이션
-const scrollUp = keyframes`
-  0% { transform: translateY(0); }
-  100% { transform: translateY(-50%); } 
-`;
-
-const RollingContainer = styled.div`
-  height: 350px; overflow: hidden; position: relative;
-  /* 상하단 페이드 효과 */
-  &::before, &::after {
-    content: ""; position: absolute; left: 0; right: 0; height: 30px; z-index: 2; pointer-events: none;
-  }
-  &::before { top: 0; background: linear-gradient(to bottom, #111827, transparent); }
-  &::after { bottom: 0; background: linear-gradient(to top, #111827, transparent); }
-`;
-
-const RollingContent = styled.div`
-  /* 데이터 양에 따라 속도 조절 가능, 여기선 20초 */
-  animation: ${scrollUp} 30s linear infinite;
-  &:hover { animation-play-state: paused; }
+// 깜빡이는 애니메이션 (NEW 뱃지용)
+const blink = keyframes` 0% { opacity: 1; } 50% { opacity: 0.4; } 100% { opacity: 1; } `;
+const NewBadge = styled(Tag)`
+  animation: ${blink} 1.5s infinite; font-weight: bold; border: none; margin-right: 8px;
 `;
 
 const LogItem = styled(List.Item)`
   border-bottom: 1px solid #1f2937; padding: 12px 15px !important; background: #111827;
-  display: flex; justify-content: space-between; align-items: center;
-  &:hover { background: rgba(255,255,255,0.02); }
+  display: flex; justify-content: space-between; align-items: center; transition: background 0.3s;
+  &:hover { background: rgba(255,255,255,0.05); }
 `;
 
 // --- 봇 전략 정의 ---
@@ -69,41 +52,39 @@ const AutoSolutionPage = () => {
   const [loading, setLoading] = useState(true);
   const [activeBotId, setActiveBotId] = useState(2); 
   const [rawData, setRawData] = useState([]); 
-  const [selectedDate, setSelectedDate] = useState(dayjs()); // 날짜 선택 (기본 오늘)
+  const [selectedDate, setSelectedDate] = useState(dayjs()); 
 
-  // 계산된 상태값
   const [chartData, setChartData] = useState([]);
   const [currentBalance, setCurrentBalance] = useState(10000000);
-  const [rollingLogs, setRollingLogs] = useState([]); // 롤링용 로그
+  const [latestLogs, setLatestLogs] = useState([]); // 최신 10개 로그
   const [winRate, setWinRate] = useState(0);
   const [todayProfit, setTodayProfit] = useState(0);
   const [totalTrades, setTotalTrades] = useState(0);
 
   const startBalance = 10000000;
 
-  // 1. 데이터 가져오기 (LivePicks 방식 적용: 타임스탬프 범위 쿼리)
+  // 1. 데이터 가져오기 (정확한 날짜/시간 필터링)
   useEffect(() => {
     setLoading(true);
     
     // 선택한 날짜의 00:00:00 ~ 23:59:59 타임스탬프 구하기
-    // LivePicks.jsx의 로직을 그대로 사용하여 DB 쿼리에 적용
     const startOfDay = selectedDate.startOf('day').toDate();
     const endOfDay = selectedDate.endOf('day').toDate();
     
     const startTs = Timestamp.fromDate(startOfDay);
     const endTs = Timestamp.fromDate(endOfDay);
 
-    // 쿼리: created_at 기준으로 해당 날짜의 데이터만 가져옴
+    // created_at 기준으로 정확히 쿼리 (시간순 정렬)
     const q = query(
         collection(db, "game_history"),
         where("created_at", ">=", startTs),
         where("created_at", "<=", endTs),
-        orderBy("created_at", "asc") // 그래프를 위해 시간순 정렬 필수
+        orderBy("created_at", "asc") // 계산을 위해 오름차순(과거->미래) 정렬 필수
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
         const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        console.log(`🔥 [${selectedDate.format('YYYY-MM-DD')}] 로드된 데이터: ${docs.length}건`);
+        // console.log(`🔥 [${selectedDate.format('YYYY-MM-DD')}] 데이터: ${docs.length}건 로드됨`);
         setRawData(docs);
         setLoading(false);
     });
@@ -111,7 +92,7 @@ const AutoSolutionPage = () => {
     return () => unsubscribe();
   }, [selectedDate]); 
 
-  // 2. 시뮬레이션 로직 (데이터가 로드되면 실행)
+  // 2. 시뮬레이션 계산 로직
   useEffect(() => {
     if (loading) return;
     calculateBotPerformance(activeBotId, rawData);
@@ -124,21 +105,22 @@ const AutoSolutionPage = () => {
     let betCount = 0;
     const logs = [];
 
-    // 시간별 차트 데이터 초기화 (0시부터 현재시간/또는 23시까지)
+    // 차트용 데이터 초기화 (0시부터 현재까지)
     const isToday = selectedDate.isSame(dayjs(), 'day');
     const currentHour = isToday ? new Date().getHours() : 23;
-    
     const hourlyData = {};
     for (let i = 0; i <= currentHour; i++) hourlyData[i] = startBalance;
 
+    // 데이터 순회 (과거 -> 미래 순)
     data.forEach(game => {
-        // 데이터 파싱
+        // 데이터 정제
         const step = parseInt(game.step, 10); 
-        const resultRaw = (game.result || "").trim().toUpperCase(); // LivePicks 처럼 안전하게 처리
+        const resultRaw = (game.result || "").trim().toUpperCase(); 
         
+        // 날짜 파싱
         let gameTime = new Date();
         if (game.created_at && game.created_at.toDate) {
-            gameTime = game.created_at.toDate(); // Firestore Timestamp -> JS Date
+            gameTime = game.created_at.toDate();
         }
         const hour = gameTime.getHours();
         const timeStr = dayjs(gameTime).format('HH:mm');
@@ -146,9 +128,7 @@ const AutoSolutionPage = () => {
         let change = 0;
         let isBetting = false;
 
-        // --- 봇 로직 적용 ---
-        
-        // [Bot 1] 1단계 고정 배팅
+        // [Bot 1] 1단계 고정
         if (strategy.type === 'FIXED') {
             if (step === 1) {
                 isBetting = true;
@@ -161,14 +141,14 @@ const AutoSolutionPage = () => {
             const minStep = strategy.steps[0];
             const maxStep = strategy.steps[strategy.steps.length - 1];
 
-            // 적중 (수익 발생)
+            // 범위 내 적중 (수익)
             if (step >= minStep && step <= maxStep && resultRaw === 'WIN') {
                 isBetting = true;
                 change = 150000; 
             }
-            // 시스템 파산 (마지막 단계에서 패배)
-            // LivePicks 처럼 result가 WIN이 아니면 패배로 간주하되, 여기선 특정 단계 패배만 체크
-            else if (step === maxStep && resultRaw !== 'WIN') { 
+            // 시스템 파산 (마지막 단계 패배)
+            // 🔥 [중요] LOSS, LOSE, FAIL 등 패배 키워드 확실히 체크
+            else if (step === maxStep && ['LOSE', 'LOSS', 'FAIL'].some(key => resultRaw.includes(key))) {
                 isBetting = true;
                 change = -3300000; 
             }
@@ -181,6 +161,7 @@ const AutoSolutionPage = () => {
 
             logs.push({
                 id: game.id,
+                timestamp: dayjs(gameTime), // 비교용 객체
                 time: timeStr,
                 room: game.room_name,
                 result: change > 0 ? 'WIN' : 'LOSE',
@@ -189,11 +170,11 @@ const AutoSolutionPage = () => {
             });
         }
 
-        // 시간별 잔고 업데이트 (해당 시간의 마지막 잔고가 기록됨)
+        // 시간별 잔고 (덮어쓰기 -> 해당 시간의 최종 잔고가 됨)
         if (hour <= currentHour) hourlyData[hour] = balance;
     });
 
-    // 차트 데이터 포맷팅
+    // 차트 포맷팅
     const formattedChart = Object.keys(hourlyData).map(h => ({
         time: `${h}:00`,
         balance: hourlyData[h]
@@ -204,7 +185,7 @@ const AutoSolutionPage = () => {
     setTodayProfit(balance - startBalance);
     setTotalTrades(betCount);
     setWinRate(betCount === 0 ? 0 : Math.round((wins / betCount) * 100));
-    setRollingLogs(logs.reverse()); // 최신순으로 정렬
+    setLatestLogs(logs.reverse().slice(0, 10)); // 최신 10개만
   };
 
   return (
@@ -219,7 +200,7 @@ const AutoSolutionPage = () => {
             <p style={{color:'#94a3b8', marginTop: 5}}>실시간 DB 데이터를 기반으로 각 전략별 수익을 시뮬레이션합니다. (00시 자동 초기화)</p>
          </div>
          
-         {/* 날짜 선택기 (과거 이력 조회) */}
+         {/* 날짜 선택기 */}
          <div>
              <span style={{color:'#94a3b8', marginRight: 10}}>Date:</span>
              <DatePicker 
@@ -336,55 +317,60 @@ const AutoSolutionPage = () => {
               </Card>
           </Col>
 
-          {/* 4. 실시간 로그 (무한 롤링) */}
+          {/* 4. Real-time Activity (최신 10개 + NEW 뱃지) */}
           <Col xs={24} lg={8}>
               <Card 
-                title={<span style={{color:'white'}}><HistoryOutlined /> {selectedDate.isSame(dayjs(), 'day') ? "Real-time Activity" : "Past Activity"}</span>} 
+                title={<span style={{color:'white'}}><HistoryOutlined /> Real-time Activity</span>} 
                 bordered={false} 
                 style={{background:'#111827', border:'1px solid #374151', height:'100%', marginTop: window.innerWidth < 992 ? 20 : 0}}
                 bodyStyle={{padding: 0}}
               >
-                  {rollingLogs.length > 0 ? (
-                      <RollingContainer>
-                          {/* 
-                             무한 롤링을 위해 리스트를 복제해서 렌더링.
-                             데이터가 적을 경우엔 애니메이션 끄고 그냥 보여주는게 나음.
-                          */}
-                          <RollingContent style={{ animationPlayState: rollingLogs.length < 5 ? 'paused' : 'running' }}>
-                              {[...rollingLogs, ...rollingLogs].map((item, idx) => (
-                                  <LogItem key={`${item.id}-${idx}`}>
-                                      <div style={{display:'flex', alignItems:'center', gap: 10}}>
-                                          <Avatar 
-                                              size="small"
-                                              icon={item.result === 'WIN' ? <CheckCircleOutlined /> : <CloseCircleOutlined />} 
-                                              style={{
-                                                  backgroundColor: item.result === 'WIN' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)', 
-                                                  color: item.result === 'WIN' ? '#10b981' : '#ef4444'
-                                              }} 
-                                          />
-                                          <div>
-                                              <div style={{color:'white', fontSize: 13, fontWeight:'bold'}}>{item.room}</div>
-                                              <div style={{color:'#64748b', fontSize: 11}}>{item.time}</div>
-                                          </div>
-                                      </div>
-                                      <div style={{textAlign:'right'}}>
-                                          <div style={{color: item.result === 'WIN' ? '#10b981' : '#ef4444', fontWeight:'bold', fontSize: 13}}>
-                                              {item.change > 0 ? '+' : ''}{item.change.toLocaleString()}
-                                          </div>
-                                          <div style={{color:'#94a3b8', fontSize: 11}}>
-                                              {(item.balance / 10000).toFixed(0)}만
-                                          </div>
-                                      </div>
-                                  </LogItem>
-                              ))}
-                          </RollingContent>
-                      </RollingContainer>
-                  ) : (
-                      <div style={{textAlign:'center', padding: 60, color:'#64748b'}}>
-                          <SyncOutlined spin={loading} style={{fontSize: 24, marginBottom: 10}} />
-                          <div>{loading ? '데이터 로딩 중...' : '데이터가 없습니다.'}</div>
-                      </div>
-                  )}
+                  <div style={{height: 400, overflowY: 'auto', padding: '0 15px'}}>
+                      {latestLogs.length > 0 ? (
+                          <List
+                            itemLayout="horizontal"
+                            dataSource={latestLogs}
+                            renderItem={item => {
+                                // 3분 이내 데이터는 NEW 표시
+                                const isNew = item.timestamp.diff(dayjs(), 'minute') > -3;
+                                return (
+                                    <LogItem>
+                                        <div style={{display:'flex', alignItems:'center', gap: 10}}>
+                                            <Avatar 
+                                                size="small"
+                                                icon={item.result === 'WIN' ? <CheckCircleOutlined /> : <CloseCircleOutlined />} 
+                                                style={{
+                                                    backgroundColor: item.result === 'WIN' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)', 
+                                                    color: item.result === 'WIN' ? '#10b981' : '#ef4444'
+                                                }} 
+                                            />
+                                            <div>
+                                                <div style={{color:'white', fontSize: 13, fontWeight:'bold', display:'flex', alignItems:'center'}}>
+                                                    {isNew && <NewBadge color="#f50">NEW</NewBadge>}
+                                                    {item.room}
+                                                </div>
+                                                <div style={{color:'#64748b', fontSize: 11}}>{item.time}</div>
+                                            </div>
+                                        </div>
+                                        <div style={{textAlign:'right'}}>
+                                            <div style={{color: item.result === 'WIN' ? '#10b981' : '#ef4444', fontWeight:'bold', fontSize: 13}}>
+                                                {item.change > 0 ? '+' : ''}{item.change.toLocaleString()}
+                                            </div>
+                                            <div style={{color:'#94a3b8', fontSize: 11}}>
+                                                {(item.balance / 10000).toFixed(0)}만
+                                            </div>
+                                        </div>
+                                    </LogItem>
+                                );
+                            }}
+                          />
+                      ) : (
+                          <div style={{textAlign:'center', padding: 60, color:'#64748b'}}>
+                              <SyncOutlined spin={loading} style={{fontSize: 24, marginBottom: 10}} />
+                              <div>{loading ? '데이터 분석 중...' : '데이터가 없습니다.'}</div>
+                          </div>
+                      )}
+                  </div>
                   
                   <div style={{padding: 15, borderTop: '1px solid #1f2937'}}>
                       <Button type="primary" block style={{background:'#d4af37', border:'none', color:'black', fontWeight:'bold', height: 40}}>
