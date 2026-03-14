@@ -82,7 +82,7 @@ const reservationData = Array.from({ length: 30 }, (_, i) => ({ id: `user${Math.
 
 const Login = () => {
   const navigate = useNavigate();
-  const [form] = Form.useForm(); // 🔥 [추가] 폼 인스턴스 생성 (자동 입력을 위해 필요)
+  const [form] = Form.useForm(); 
   const [loading, setLoading] = useState(false);
   
   // 모달 상태
@@ -187,7 +187,6 @@ const Login = () => {
     setServerCode(code);
     setIsCodeSent(true);
     
-    // 🔥 [수정됨] 문구 단순화
     setTimeout(() => {
         alert(`[WhaleBet Demo System]\n\n인증번호: ${code}`);
     }, 500);
@@ -236,10 +235,9 @@ const Login = () => {
     }
   };
 
-  // 🔥 [추가] 확인 버튼 누르면 폼 자동 입력 및 닫기
+  // 폼 자동 입력 및 닫기
   const handleAutoFillAndClose = () => {
     if (generatedAccount) {
-        // antd form 인스턴스로 값 설정
         form.setFieldsValue({
             username: generatedAccount.id,
             password: generatedAccount.pw
@@ -288,7 +286,7 @@ const Login = () => {
                         onClick={() => setIsDemoModalVisible(true)}
                         style={{height: 50, padding: '0 40px', fontWeight:'bold', background: 'white', color: 'black', border:'none'}}
                     >
-                        View Demo (3시간 무료)
+                        View Demo (3 Hours Free)
                     </Button>
                     <Button 
                         size="large" 
@@ -308,7 +306,6 @@ const Login = () => {
                     <Title level={3} style={{color:'white', margin:0, fontWeight: 800}}>MEMBER LOGIN</Title>
                     <Text style={{color:'#64748b', fontSize: 13}}>Access your personal AI dashboard</Text>
                   </div>
-                  {/* 🔥 [수정됨] form 인스턴스 연결 */}
                   <Form name="login" form={form} onFinish={onFinish} layout="vertical">
                     <Form.Item name="username" rules={[{ required: true }]}><Input prefix={<UserOutlined />} placeholder="Username" size="large" style={{background:'#1e293b', border:'1px solid #334155'}} /></Form.Item>
                     <Form.Item name="password" rules={[{ required: true }]}><Input.Password prefix={<LockOutlined />} placeholder="Password" size="large" style={{background:'#1e293b', border:'1px solid #334155'}} /></Form.Item>
@@ -434,13 +431,12 @@ const Login = () => {
             </Form>
         </Modal>
 
-        {/* 3. 데모 계정 발급 완료 모달 (수정됨) */}
+        {/* 3. 데모 계정 발급 완료 모달 */}
         <Modal open={!!generatedAccount} onCancel={() => setGeneratedAccount(null)} footer={null} centered closable={false}>
             <div style={{textAlign:'center', padding: 20}}>
                 <SafetyCertificateOutlined style={{fontSize: 40, color: '#10b981', marginBottom: 15}} />
                 <h2 style={{color:'white', margin:0}}>데모 계정 생성 완료!</h2>
                 
-                {/* 🔥 [수정됨] 문구 단순화 및 시뮬레이션 텍스트 제거 */}
                 <Alert 
                     message="이메일 전송 완료" 
                     description={`ID와 비밀번호가 ${generatedAccount?.email}로 전송되었습니다.`}
@@ -449,7 +445,6 @@ const Login = () => {
                     style={{margin: '20px 0', textAlign:'left'}}
                 />
                 
-                {/* 🔥 [수정됨] 강조 박스 디자인 */}
                 <div style={{
                     background: 'rgba(251, 191, 36, 0.1)', 
                     border: '2px solid #fbbf24', 
@@ -479,7 +474,6 @@ const Login = () => {
                     </div>
                 </div>
 
-                {/* 🔥 [수정됨] 클릭 시 자동 입력 함수 실행 */}
                 <Button type="primary" block style={{marginTop: 20, height: 45, fontSize: 15, fontWeight:'bold'}} onClick={handleAutoFillAndClose}>
                     확인 (로그인하러 가기)
                 </Button>
