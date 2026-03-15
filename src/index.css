@@ -24,3 +24,59 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: #00e5ff; 
 }
+
+/* =========================================
+   [모바일 반응형 최적화 코드 추가]
+   화면 너비가 768px 이하일 때만 적용됩니다.
+   ========================================= */
+@media (max-width: 768px) {
+
+  /* 1. 전체 폰트 및 제목 크기 강제 축소 (Auto 솔루션 글자 겹침 방지) */
+  h1 { font-size: 22px !important; line-height: 1.3 !important; }
+  h2 { font-size: 18px !important; line-height: 1.3 !important; }
+  h3 { font-size: 16px !important; }
+  span, div, p { font-size: 14px; }
+
+  /* 2. 표(Table) 가로 스크롤 허용 (찌그러짐 해결) */
+  .ant-table-wrapper {
+    overflow-x: auto; /* 표가 화면보다 크면 옆으로 스크롤 생김 */
+    width: 100%;
+  }
+  .ant-table {
+    min-width: 600px; /* 표의 최소 너비를 잡아줘서 글자가 안 찌그러지게 함 */
+  }
+  .ant-table-thead > tr > th, 
+  .ant-table-tbody > tr > td {
+    white-space: nowrap !important; /* 글자 줄바꿈 금지 (한 줄로 나오게) */
+    padding: 8px 10px !important;   /* 셀 안쪽 여백 줄임 */
+    font-size: 12px !important;     /* 표 안의 글자 크기 조금 줄임 */
+  }
+
+  /* 3. 카드 및 컨텐츠 여백 최적화 (마이페이지 등) */
+  .ant-card-body {
+    padding: 12px !important; /* 카드 내부 여백을 줄여서 화면 공간 확보 */
+  }
+  .ant-layout-content {
+    padding: 10px !important; /* 전체 배경 여백 줄임 */
+  }
+
+  /* 4. 마이페이지 정보 테이블 정렬 */
+  .ant-descriptions-item-label,
+  .ant-descriptions-item-content {
+    padding: 8px !important;
+    font-size: 13px !important;
+  }
+  
+  /* 5. 버튼 크기 모바일 최적화 */
+  .ant-btn {
+    font-size: 13px !important;
+    height: auto !important;
+    padding: 4px 12px !important;
+  }
+  
+  /* 6. 모달(팝업) 창 크기 조절 */
+  .ant-modal {
+    max-width: 95% !important;
+    margin: 10px auto !important;
+  }
+}
