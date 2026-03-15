@@ -323,7 +323,8 @@ const Login = () => {
                 <StatItem><Statistic title="SAFETY HITS" value={stats.safetyHit} valueStyle={{ color: '#3b82f6' }} prefix={<ThunderboltOutlined />} /></StatItem>
             </StatsBar>
 
-            <Row gutter={60} align="middle">
+            {/* ▼▼▼ 수정된 부분 (className 추가됨) ▼▼▼ */}
+            <Row gutter={60} align="middle" className="mobile-landing-wrapper">
               <Col xs={24} md={14}>
                 <IntroSection>
                   <Tag color="gold" style={{marginBottom: 15, fontWeight:'bold', border:'none'}}>VER 2.0 AI SYSTEM</Tag>
@@ -350,7 +351,8 @@ const Login = () => {
                 </IntroSection>
               </Col>
 
-              <Col xs={24} md={10}>
+              {/* ▼▼▼ 수정된 부분 (className 추가됨) ▼▼▼ */}
+              <Col xs={24} md={10} className="mobile-login-box">
                 <LoginCard bordered={false}>
                   <div style={{textAlign:'center', marginBottom: 30}}>
                     <Title level={3} style={{color:'white', margin:0, fontWeight: 800}}>MEMBER LOGIN</Title>
@@ -562,14 +564,12 @@ const Login = () => {
                             <Col span={6}>
                                 <div style={{background: '#111827', padding: 10, borderRadius: 6, textAlign:'center', border:'1px solid #1f2937'}}>
                                     <div style={{color:'#f59e0b', fontWeight:'bold'}}>STREAK</div>
-                                    {/* 수정된 부분: 텍스트 변경 및 가독성 개선 */}
                                     <div style={{color:'#94a3b8', fontSize:11, fontWeight:'bold'}}>4단계 이내 승리 연승</div>
                                 </div>
                             </Col>
                             <Col span={6}>
                                 <div style={{background: '#111827', padding: 10, borderRadius: 6, textAlign:'center', border:'1px solid #1f2937'}}>
                                     <div style={{color:'#3b82f6', fontWeight:'bold'}}>SAFETY</div>
-                                    {/* 수정된 부분: 텍스트 변경 및 가독성 개선 */}
                                     <div style={{color:'#94a3b8', fontSize:11, fontWeight:'bold'}}>3~6단계 연승 횟수</div>
                                 </div>
                             </Col>
@@ -577,7 +577,6 @@ const Login = () => {
 
                         <h3 style={{color:'#d4af37', fontSize: 16, marginBottom: 15}}>2. 메인 대시보드 화면</h3>
                         <GuideImageContainer>
-                            {/* 첨부하신 사진 파일명을 dashboard_guide.png 로 public 폴더에 넣어주세요 */}
                             <img src="/dashboard_guide.png" alt="Dashboard Preview" />
                         </GuideImageContainer>
                         <div style={{background:'rgba(255,255,255,0.05)', padding:15, borderRadius:8, fontSize:13, color:'#cbd5e1', lineHeight:1.6}}>
